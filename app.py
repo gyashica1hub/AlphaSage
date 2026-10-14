@@ -330,8 +330,10 @@ with st.sidebar:
             st.session_state.nav_page = nav_item
             st.rerun()
     st.markdown(
-        '<div class="custom-card" style="margin-top:10px"><strong>Guest mode</strong><br>'
-        '<span style="color:#94A3B8;font-size:12px">Sign in to sync your portfolio and watchlist across devices.</span></div>',
+        '<div class="custom-card guest-mode-card" style="margin-top:10px">'
+        '<strong>Guest mode</strong><br>'
+        '<span style="color:#B4C1B8;font-size:12px;line-height:1.6">Sign in to sync your portfolio and watchlist across devices.</span><br>'
+        '<span style="display:inline-block;margin-top:10px;color:#39E58C;font-weight:700;font-size:13px">↪&nbsp; Sign in</span></div>',
         unsafe_allow_html=True,
     )
 
