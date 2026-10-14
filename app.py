@@ -62,8 +62,9 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
     html, body, [class*="css"] {{ font-family: 'Inter', -apple-system, sans-serif; }}
-    .brand-title {{ font-size: 30px !important; letter-spacing: -1.2px; color: #F1FFF5 !important; }}
-    section[data-testid="stSidebar"] {{ background: #030504 !important; }}
+    .brand-title {{ font-size: 32px !important; letter-spacing: -1.4px; color: #F1FFF5 !important; }}
+    section[data-testid="stSidebar"] {{ background: #030504 !important; min-width: 300px; max-width: 300px; }}
+    section[data-testid="stSidebar"] > div {{ padding: 20px 15px 28px; }}
     header[data-testid="stHeader"] {{ background: transparent; }}
     [data-testid="stToolbar"] {{ display: none; }}
     [data-testid="stDecoration"] {{ display: none; }}
@@ -191,7 +192,7 @@ st.markdown(f"""
     section[data-testid="stSidebar"] div.stButton > button {{
         justify-content: flex-start; background: transparent; border-color: transparent;
         color: {T['subtext']} !important; box-shadow: none; border-radius: 10px;
-        font-weight: 600; padding: 8px 12px; text-align: left;
+        font-weight: 600; padding: 10px 13px; text-align: left; min-height: 42px;
     }}
     section[data-testid="stSidebar"] div.stButton > button div {{ justify-content: flex-start; }}
     section[data-testid="stSidebar"] div.stButton > button:hover {{
@@ -299,13 +300,18 @@ with st.sidebar:
     st.markdown("**PLATFORM**")
     if "nav_page" not in st.session_state:
         st.session_state.nav_page = "Portfolio"
+    nav_icons = {
+        "Dashboard": "▦", "Scanner": "⌁", "Global Markets": "◎", "Portfolio": "▣",
+        "Watchlist": "☆", "News": "▤", "Blog": "▥", "Pricing": "$",
+        "Data coverage": "▤", "Settings": "⚙",
+    }
     for nav_item in ["Dashboard", "Scanner"]:
-        if st.button(nav_item, key=f"nav_{nav_item.lower().replace(' ', '_')}", use_container_width=True):
+        if st.button(f"{nav_icons[nav_item]}   {nav_item}", key=f"nav_{nav_item.lower().replace(' ', '_')}", use_container_width=True, type="primary" if st.session_state.nav_page == nav_item else "secondary"):
             st.session_state.nav_page = nav_item
             st.rerun()
     st.markdown("**MARKETS**")
-    for nav_item in ["Global Markets", "Portfolio", "Watchlist", "News", "Research"]:
-        if st.button(nav_item, key=f"nav_{nav_item.lower().replace(' ', '_')}", use_container_width=True):
+    for nav_item in ["Global Markets", "Portfolio", "Watchlist", "News", "Blog"]:
+        if st.button(f"{nav_icons[nav_item]}   {nav_item}", key=f"nav_{nav_item.lower().replace(' ', '_')}", use_container_width=True, type="primary" if st.session_state.nav_page == nav_item else "secondary"):
             st.session_state.nav_page = nav_item
             st.rerun()
     nav_page = st.session_state.nav_page
@@ -319,6 +325,10 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.markdown("**ACCOUNT**")
+    for nav_item in ["Pricing", "Data coverage", "Settings"]:
+        if st.button(f"{nav_icons[nav_item]}   {nav_item}", key=f"nav_{nav_item.lower().replace(' ', '_')}", use_container_width=True, type="primary" if st.session_state.nav_page == nav_item else "secondary"):
+            st.session_state.nav_page = nav_item
+            st.rerun()
     st.markdown(
         '<div class="custom-card" style="margin-top:10px"><strong>Guest mode</strong><br>'
         '<span style="color:#94A3B8;font-size:12px">Sign in to sync your portfolio and watchlist across devices.</span></div>',
