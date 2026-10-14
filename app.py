@@ -407,7 +407,7 @@ alerts = check_alerts(portfolio, loss_threshold=loss_threshold, gain_threshold=g
 col_title, col_export, col_import, col_bell = st.columns([4.2, 1.2, 1.2, 1])
 with col_title:
     st.markdown('<p class="app-title">Portfolio</p>', unsafe_allow_html=True)
-    st.markdown('<p class="app-subtitle"><span class="live-dot"></span> Track holdings, cost basis, allocation, and portfolio intelligence</p>', unsafe_allow_html=True)
+    st.markdown('<p class="app-subtitle">Track holdings, cost basis, allocation, and portfolio intelligence</p>', unsafe_allow_html=True)
 
 with col_export:
     export_df = pd.DataFrame(portfolio)
@@ -455,6 +455,12 @@ with col_bell:
                         f'moves beyond {loss_threshold}% or {gain_threshold}% from your buy price.</div>', unsafe_allow_html=True)
         st.caption("Change thresholds anytime from the sidebar under Notification Settings.")
 
+st.markdown(
+    '<div class="custom-card" style="display:inline-block;padding:9px 14px;margin:12px 0 18px 0;">'
+    '<span style="color:#CBD5E1">⚠ Not financial advice. Data may be delayed or incomplete.</span></div>',
+    unsafe_allow_html=True,
+)
+
 
 # ==================================================================
 # TICKER BAR
@@ -487,10 +493,10 @@ total_pnl = (total_current - total_invested) if total_current is not None else N
 total_pnl_pct = (total_pnl / total_invested * 100) if total_pnl is not None and total_invested else None
 
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Portfolio Value", f"₹{total_current:,.0f}" if total_current is not None else "Unavailable")
-m2.metric("Total Invested", f"₹{total_invested:,.0f}")
-m3.metric("Total P&L", f"₹{total_pnl:,.0f}" if total_pnl is not None else "Unavailable", f"{total_pnl_pct:.2f}%" if total_pnl_pct is not None else None)
-m4.metric("Holdings", f"{len(df_portfolio)}")
+m1.metric("Total Value", f"₹{total_current:,.0f}" if total_current is not None else "Unavailable")
+m2.metric("Total Gain/Loss", f"₹{total_pnl:,.0f}" if total_pnl is not None else "Unavailable")
+m3.metric("Return", f"{total_pnl_pct:.2f}%" if total_pnl_pct is not None else "Unavailable")
+m4.metric("Est. Annual Dividends", "Unavailable", help="Dividend history will be enabled when the market-data provider supplies corporate actions.")
 
 st.write("")
 
@@ -569,9 +575,15 @@ with col_donut:
 st.write("")
 
 # ==================================================================
-# WATCHLIST (Holdings table)
+# HOLDINGS (Holdings table)
 # ==================================================================
-st.markdown('<div class="section-title">Watchlist</div>', unsafe_allow_html=True)
+holdings_header, refresh_col = st.columns([5, 1])
+with holdings_header:
+    st.markdown('<div class="section-title">Holdings</div>', unsafe_allow_html=True)
+with refresh_col:
+    if st.button("Refresh prices", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
 
 display_df = df_portfolio[["name", "symbol", "quantity", "avg_buy_price",
                             "current_price", "current_value", "pnl", "pnl_pct"]].copy()
