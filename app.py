@@ -38,7 +38,7 @@ LIGHT = {
     "bg": "#F6F8FB", "card": "#FFFFFF", "border": "#EEF1F6",
     "text": "#12172B", "subtext": "#8A94A6", "sidebar_bg": "#FFFFFF",
     "up": "#16A34A", "down": "#DC2626", "accent": "#38BDF8",
-    "btn_bg": "#12172B", "btn_text": "#FFFFFF", "btn_hover": "#2A3050",
+    "btn_bg": "#EAFBF0", "btn_text": "#102018", "btn_hover": "#D7F7E3",
     "notif_loss_bg": "#FDECEC", "notif_loss_text": "#7A1F1F",
     "notif_gain_bg": "#EAFBF0", "notif_gain_text": "#155C33",
     "shadow": "rgba(20, 30, 60, 0.04)",
@@ -186,14 +186,16 @@ st.markdown(f"""
     div[data-baseweb="input"] > div,
     div[data-testid="stFileUploader"] section,
     div[data-testid="stFileUploaderDropzone"] {{
-        background: #0D120F !important; color: #E8FFF0 !important;
-        border-color: #1C3025 !important;
+        background: {T['card']} !important; color: {T['text']} !important;
+        border-color: {T['border']} !important;
     }}
     div[data-baseweb="select"] span,
     div[data-baseweb="select"] input,
-    div[data-baseweb="input"] input {{ color: #E8FFF0 !important; }}
-    div[data-baseweb="popover"] {{ background: #0D120F !important; border: 1px solid #1C3025 !important; }}
-    [data-testid="stDataFrame"] {{ border: 1px solid #1C3025 !important; border-radius: 14px; overflow: hidden; }}
+    div[data-baseweb="input"] input {{ color: {T['text']} !important; }}
+    div[data-baseweb="popover"] {{ background: {T['card']} !important; border: 1px solid {T['border']} !important; }}
+    div[role="option"] {{ background: {T['card']} !important; color: {T['text']} !important; }}
+    div[role="option"]:hover {{ background: {T['btn_hover']} !important; color: {T['btn_text']} !important; }}
+    [data-testid="stDataFrame"] {{ border: 1px solid {T['border']} !important; border-radius: 14px; overflow: hidden; }}
     section[data-testid="stSidebar"] div.stButton > button {{
         justify-content: flex-start; background: transparent; border-color: transparent;
         color: {T['subtext']} !important; box-shadow: none; border-radius: 10px;
@@ -223,6 +225,7 @@ st.markdown(f"""
         margin-bottom: 12px; margin-top: 4px; letter-spacing: -0.2px;
         display: flex; align-items: center; gap: 8px;
     }}
+    .disclaimer-text {{ color: {T['text']}; }}
     .section-title::before {{
         content: ""; display: inline-block; width: 4px; height: 16px;
         background: {T['accent']}; border-radius: 3px;
@@ -488,7 +491,7 @@ with col_bell:
 
 st.markdown(
     '<div class="custom-card" style="display:inline-block;padding:9px 14px;margin:12px 0 18px 0;">'
-    '<span style="color:#CBD5E1">⚠ Not financial advice. Data may be delayed or incomplete.</span></div>',
+    '<span class="disclaimer-text">⚠ Not financial advice. Data may be delayed or incomplete.</span></div>',
     unsafe_allow_html=True,
 )
 
