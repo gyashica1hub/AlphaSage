@@ -62,6 +62,9 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
     html, body, [class*="css"] {{ font-family: 'Inter', -apple-system, sans-serif; }}
+    header[data-testid="stHeader"] {{ background: transparent; }}
+    [data-testid="stToolbar"] {{ display: none; }}
+    [data-testid="stDecoration"] {{ display: none; }}
 
     .stApp {{
         background-color: {T['bg']};
@@ -163,11 +166,20 @@ st.markdown(f"""
         transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.15s ease;
         box-shadow: 0 1px 3px {T['shadow']};
     }}
+    [data-testid="stDownloadButton"] button,
+    [data-testid="stPopover"] > button {{
+        background: {T['card']} !important; color: {T['text']} !important;
+        border: 1px solid {T['border']} !important; border-radius: 12px !important;
+        min-height: 42px; font-weight: 600;
+    }}
+    [data-testid="stDownloadButton"] button p,
+    [data-testid="stPopover"] > button p {{ color: {T['text']} !important; }}
     section[data-testid="stSidebar"] div.stButton > button {{
         justify-content: flex-start; background: transparent; border-color: transparent;
         color: {T['subtext']} !important; box-shadow: none; border-radius: 10px;
-        font-weight: 600; padding: 8px 12px;
+        font-weight: 600; padding: 8px 12px; text-align: left;
     }}
+    section[data-testid="stSidebar"] div.stButton > button div {{ justify-content: flex-start; }}
     section[data-testid="stSidebar"] div.stButton > button:hover {{
         background: {T['card']}; color: {T['text']} !important; border-color: {T['border']};
     }}
@@ -273,7 +285,12 @@ with st.sidebar:
     st.markdown("**PLATFORM**")
     if "nav_page" not in st.session_state:
         st.session_state.nav_page = "Portfolio"
-    for nav_item in ["Dashboard", "Scanner", "Global Markets", "Portfolio", "Watchlist", "News", "Research"]:
+    for nav_item in ["Dashboard", "Scanner"]:
+        if st.button(nav_item, key=f"nav_{nav_item.lower().replace(' ', '_')}", use_container_width=True):
+            st.session_state.nav_page = nav_item
+            st.rerun()
+    st.markdown("**MARKETS**")
+    for nav_item in ["Global Markets", "Portfolio", "Watchlist", "News", "Research"]:
         if st.button(nav_item, key=f"nav_{nav_item.lower().replace(' ', '_')}", use_container_width=True):
             st.session_state.nav_page = nav_item
             st.rerun()
@@ -282,12 +299,12 @@ with st.sidebar:
         st.info(f"{nav_page} is part of the AlphaSage workspace and will be enabled as its data service is implemented.")
         st.stop()
 
-    st.divider()
     st.markdown(
         '<div class="custom-card"><strong>✦ Get early access</strong><br>'
         '<span style="color:#94A3B8;font-size:12px">Join the AlphaSage research community for advanced AI features.</span></div>',
         unsafe_allow_html=True,
     )
+    st.markdown("**ACCOUNT**")
     st.markdown(
         '<div class="custom-card" style="margin-top:10px"><strong>Guest mode</strong><br>'
         '<span style="color:#94A3B8;font-size:12px">Sign in to sync your portfolio and watchlist across devices.</span></div>',
@@ -454,7 +471,7 @@ for _, row in df_portfolio.iterrows():
 
 st.markdown(f"""
     <div class="ticker-wrap">
-        <div class="ticker-move">{ticker_items}{ticker_items}</div>
+        <div class="ticker-move">{ticker_items}</div>
     </div>
 """, unsafe_allow_html=True)
 
