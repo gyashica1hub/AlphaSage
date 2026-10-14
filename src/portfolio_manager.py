@@ -1,71 +1,191 @@
-"""
-portfolio_manager.py
----------------------
-Portfolio mein stock add/remove karne aur JSON file mein permanently
-save karne ke liye. Isi wajah se browser refresh/restart ke baad bhi
-tumhara portfolio yaad rehta hai.
+"""SQLite-backed portfolio operations for the current demo user.
+
+The demo user is temporary. Authentication will replace this fixed identity,
+but the dashboard already uses the same user_id/portfolio_id ownership model.
 """
 
 import json
-import os
+import uuid
+from datetime import UTC, datetime
+from pathlib import Path
 
-PORTFOLIO_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "mock_portfolio.json")
+from src.db.sqlite import get_connection, initialize_database
+
+DEMO_USER_ID = "demo-user"
+DEMO_EMAIL = "demo@alphasage.local"
+DEMO_PORTFOLIO_NAME = "Personal Portfolio"
+SEED_FILE = Path(__file__).resolve().parents[1] / "data" / "mock_portfolio.json"
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _ensure_demo_portfolio() -> str:
+    initialize_database()
+    now = _now()
+
+    with get_connection() as connection:
+        connection.execute(
+            """INSERT OR IGNORE INTO users
+               (id, email, display_name, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (DEMO_USER_ID, DEMO_EMAIL, "Demo User", now, now),
+        )
+
+        portfolio = connection.execute(
+            "SELECT id FROM portfolios WHERE user_id = ? LIMIT 1",
+            (DEMO_USER_ID,),
+        ).fetchone()
+
+        if portfolio:
+            portfolio_id = portfolio["id"]
+        else:
+            portfolio_id = str(uuid.uuid4())
+            connection.execute(
+                """INSERT INTO portfolios
+                   (id, user_id, name, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (portfolio_id, DEMO_USER_ID, DEMO_PORTFOLIO_NAME, now, now),
+            )
+
+        position_count = connection.execute(
+            "SELECT COUNT(*) AS count FROM portfolio_positions WHERE portfolio_id = ?",
+            (portfolio_id,),
+        ).fetchone()["count"]
+
+        if position_count == 0 and SEED_FILE.exists():
+            seed = json.loads(SEED_FILE.read_text(encoding="utf-8"))
+            for holding in seed.get("holdings", []):
+                connection.execute(
+                    """INSERT OR IGNORE INTO portfolio_positions
+                       (id, portfolio_id, symbol, name, quantity,
+                        average_buy_price, sector, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        str(uuid.uuid4()),
+                        portfolio_id,
+                        holding["symbol"],
+                        holding.get("name", holding["symbol"]),
+                        holding["quantity"],
+                        holding["avg_buy_price"],
+                        holding.get("sector", "Other"),
+                        now,
+                        now,
+                    ),
+                )
+
+    return portfolio_id
+
+
+def _holdings(portfolio_id: str) -> list[dict]:
+    with get_connection() as connection:
+        rows = connection.execute(
+            """SELECT symbol, name, quantity, average_buy_price,
+                      sector, created_at
+               FROM portfolio_positions
+               WHERE portfolio_id = ?
+               ORDER BY symbol""",
+            (portfolio_id,),
+        ).fetchall()
+
+    return [
+        {
+            "symbol": row["symbol"],
+            "name": row["name"],
+            "quantity": row["quantity"],
+            "avg_buy_price": row["average_buy_price"],
+            "buy_date": row["created_at"][:10],
+            "sector": row["sector"] or "Other",
+        }
+        for row in rows
+    ]
 
 
 def load_portfolio_raw() -> dict:
-    with open(PORTFOLIO_FILE, "r") as f:
-        return json.load(f)
+    """Return the legacy dashboard shape, backed by SQLite."""
+    portfolio_id = _ensure_demo_portfolio()
+    return {
+        "user": "Demo User",
+        "broker": "SQLite demo portfolio",
+        "portfolio_id": portfolio_id,
+        "holdings": _holdings(portfolio_id),
+    }
 
 
-def save_portfolio_raw(data: dict):
-    with open(PORTFOLIO_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+def save_portfolio_raw(data: dict) -> None:
+    """Deprecated compatibility method; direct JSON writes are disabled."""
+    raise RuntimeError("Direct portfolio file writes are disabled; use add_stock/remove_stock")
 
 
-def add_stock(symbol: str, name: str, quantity: float, avg_buy_price: float, buy_date: str, sector: str = "Other"):
-    """
-    Naya stock portfolio mein add karta hai. Agar symbol already hai,
-    toh quantity aur average price update kar deta hai (jaise real
-    broker karta hai jab tum same stock dobara khareedte ho).
-    """
-    data = load_portfolio_raw()
+def add_stock(
+    symbol: str,
+    name: str,
+    quantity: float,
+    avg_buy_price: float,
+    buy_date: str,
+    sector: str = "Other",
+) -> bool:
+    portfolio_id = _ensure_demo_portfolio()
     symbol = symbol.upper().strip()
     if not symbol.endswith(".NS") and not symbol.endswith(".BO"):
-        symbol = symbol + ".NS"  # default NSE
+        symbol = symbol + ".NS"
 
-    existing = next((h for h in data["holdings"] if h["symbol"] == symbol), None)
+    now = _now()
+    with get_connection() as connection:
+        existing = connection.execute(
+            """SELECT quantity, average_buy_price
+               FROM portfolio_positions
+               WHERE portfolio_id = ? AND symbol = ?""",
+            (portfolio_id, symbol),
+        ).fetchone()
 
-    if existing:
-        old_qty = existing["quantity"]
-        old_price = existing["avg_buy_price"]
-        new_qty = old_qty + quantity
-        new_avg_price = ((old_qty * old_price) + (quantity * avg_buy_price)) / new_qty
-        existing["quantity"] = new_qty
-        existing["avg_buy_price"] = round(new_avg_price, 2)
-    else:
-        data["holdings"].append({
-            "symbol": symbol,
-            "name": name if name else symbol.replace(".NS", "").replace(".BO", ""),
-            "quantity": quantity,
-            "avg_buy_price": avg_buy_price,
-            "buy_date": buy_date,
-            "sector": sector
-        })
+        if existing:
+            old_quantity = existing["quantity"]
+            new_quantity = old_quantity + quantity
+            new_average = (
+                (old_quantity * existing["average_buy_price"])
+                + (quantity * avg_buy_price)
+            ) / new_quantity
+            connection.execute(
+                """UPDATE portfolio_positions
+                   SET quantity = ?, average_buy_price = ?, updated_at = ?
+                   WHERE portfolio_id = ? AND symbol = ?""",
+                (new_quantity, round(new_average, 2), now, portfolio_id, symbol),
+            )
+        else:
+            connection.execute(
+                """INSERT INTO portfolio_positions
+                   (id, portfolio_id, symbol, name, quantity,
+                    average_buy_price, sector, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    str(uuid.uuid4()),
+                    portfolio_id,
+                    symbol,
+                    name or symbol.replace(".NS", "").replace(".BO", ""),
+                    quantity,
+                    avg_buy_price,
+                    sector,
+                    now,
+                    now,
+                ),
+            )
 
-    save_portfolio_raw(data)
     return True
 
 
-def remove_stock(symbol: str):
-    """
-    Portfolio se stock permanently remove karta hai.
-    """
-    data = load_portfolio_raw()
-    data["holdings"] = [h for h in data["holdings"] if h["symbol"] != symbol]
-    save_portfolio_raw(data)
+def remove_stock(symbol: str) -> bool:
+    portfolio_id = _ensure_demo_portfolio()
+    with get_connection() as connection:
+        connection.execute(
+            "DELETE FROM portfolio_positions WHERE portfolio_id = ? AND symbol = ?",
+            (portfolio_id, symbol),
+        )
     return True
 
 
-def get_all_symbols() -> list:
+def get_all_symbols() -> list[tuple[str, str]]:
     data = load_portfolio_raw()
-    return [(h["symbol"], h["name"]) for h in data["holdings"]]
+    return [(holding["symbol"], holding["name"]) for holding in data["holdings"]]
+
