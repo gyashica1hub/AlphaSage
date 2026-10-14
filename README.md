@@ -193,6 +193,16 @@ The local database is created at data/stocksense.db and is excluded from version
 
 The dashboard will be available at http://localhost:8501.
 
+## AlphaSage web frontend
+
+The repository also contains a dedicated Next.js frontend in frontend/. It is the foundation for the production web experience, while the Streamlit application remains available for the current Python prototype and analytical validation.
+
+    cd frontend
+    npm install
+    npm run dev
+
+Open http://localhost:3000. The frontend currently uses representative portfolio data and is being connected to the FastAPI/SQLite services as the web application layer is introduced.
+
 ## Validation
 
     python -m compileall -q app.py src tests
