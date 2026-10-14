@@ -1,19 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bell, Bot, BriefcaseBusiness, ChevronDown, Database, Download, Globe2, LayoutDashboard,
   LineChart, Newspaper, Plus, Search, Settings, Settings2, ShieldCheck, Sparkles,
   Upload, WalletCards, Watch
 } from "lucide-react";
 
-const holdings = [
+const fallbackHoldings = [
   { symbol: "RELIANCE.NS", name: "Reliance Industries", sector: "Energy", price: "₹1,174.60", return: "-51.06%", tone: "negative", weight: "28.4%" },
   { symbol: "TCS.NS", name: "Tata Consultancy Services", sector: "Technology", price: "₹2,304.90", return: "-34.15%", tone: "negative", weight: "22.1%" },
   { symbol: "INFY.NS", name: "Infosys", sector: "Technology", price: "₹1,088.00", return: "-24.97%", tone: "negative", weight: "19.8%" },
   { symbol: "HDFCBANK.NS", name: "HDFC Bank", sector: "Financials", price: "₹1,542.20", return: "-5.58%", tone: "negative", weight: "17.3%" },
   { symbol: "TATAMOTORS.NS", name: "Tata Motors", sector: "Industrials", price: "Unavailable", return: "—", tone: "muted", weight: "12.4%" }
 ];
+
+type Holding = typeof fallbackHoldings[number];
+type PortfolioResponse = { holdings: Holding[]; summary: Record<string, any> };
 
 const navigation = [
   { label: "Dashboard", icon: LayoutDashboard, group: "Platform" },
@@ -30,6 +33,32 @@ const navigation = [
 
 export default function Home() {
   const [active, setActive] = useState("Portfolio");
+  const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/portfolio")
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("API unavailable")))
+      .then((data) => {
+        const total = data.summary.total_value || 0;
+        setPortfolio({
+          ...data,
+          holdings: data.holdings.map((item: any) => ({
+            ...item,
+            price: item.current_price == null ? "Unavailable" : `₹${item.current_price.toLocaleString("en-IN")}`,
+            return: item.pnl_pct == null ? "—" : `${item.pnl_pct.toFixed(2)}%`,
+            tone: item.pnl_pct == null ? "muted" : item.pnl_pct < 0 ? "negative" : "positive",
+            weight: item.current_value && total ? `${((item.current_value / total) * 100).toFixed(1)}%` : "—",
+          }))
+        });
+      })
+      .catch(() => setPortfolio(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const holdings = portfolio?.holdings || fallbackHoldings;
+  const summary = portfolio?.summary;
+  const money = (value: number | null | undefined) => value == null ? "—" : `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 
   return (
     <main className="app-shell">
@@ -79,17 +108,17 @@ export default function Home() {
         <div className="disclaimer"><ShieldCheck size={16} /><span><strong>Research tool only.</strong> Market data may be delayed or incomplete. This is not financial advice.</span><button>Learn more</button></div>
 
         <section className="metric-grid">
-          <Metric label="Total value" value="₹45,276" detail="Updated just now" />
-          <Metric label="Total gain / loss" value="₹-47,774" detail="Since inception" tone="negative" />
-          <Metric label="Portfolio return" value="-51.34%" detail="Time-weighted return" tone="negative" />
+          <Metric label="Total value" value={money(summary?.total_value)} detail={loading ? "Loading market data" : "Updated from AlphaSage API"} />
+          <Metric label="Total gain / loss" value={money(summary?.total_pnl)} detail="Since inception" tone="negative" />
+          <Metric label="Portfolio return" value={summary?.return_pct == null ? "—" : `${summary.return_pct.toFixed(2)}%`} detail="Time-weighted return" tone="negative" />
           <Metric label="Est. annual dividends" value="—" detail="Awaiting corporate-action data" tone="muted" />
         </section>
 
         <section className="metric-grid intelligence">
-          <Insight label="Best performer" value="Infosys" detail="-24.97%" />
-          <Insight label="Worst performer" value="Reliance Industries" detail="-51.06%" tone="negative" />
-          <Insight label="Diversification score" value="67/100" detail="Moderately diversified" />
-          <Insight label="Risk score" value="31/100" detail="Moderate concentration risk" />
+          <Insight label="Best performer" value={summary?.best_performer?.name || "Infosys"} detail={summary?.best_performer?.pnl_pct == null ? "—" : `${summary.best_performer.pnl_pct.toFixed(2)}%`} />
+          <Insight label="Worst performer" value={summary?.worst_performer?.name || "Reliance Industries"} detail={summary?.worst_performer?.pnl_pct == null ? "—" : `${summary.worst_performer.pnl_pct.toFixed(2)}%`} tone="negative" />
+          <Insight label="Diversification score" value={summary?.diversification_score == null ? "—" : `${summary.diversification_score}/100`} detail="Calculated from current exposure" />
+          <Insight label="Risk score" value={summary?.risk_score == null ? "—" : `${summary.risk_score}/100`} detail="Lower concentration is better" />
         </section>
 
         <div className="section-heading"><div><div className="kicker">POSITIONS</div><h2>Holdings</h2></div><button className="secondary compact"><LineChart size={15} /> Refresh prices</button></div>

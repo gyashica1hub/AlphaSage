@@ -201,7 +201,13 @@ The repository also contains a dedicated Next.js frontend in frontend/. It is th
     npm install
     npm run dev
 
-Open http://localhost:3000. The frontend currently uses representative portfolio data and is being connected to the FastAPI/SQLite services as the web application layer is introduced.
+Open http://localhost:3000. The frontend uses the AlphaSage web API for portfolio data and remains available alongside the Streamlit analytical prototype.
+
+Start the API in a second terminal:
+
+    python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+
+The API health endpoint is available at http://127.0.0.1:8000/health and the portfolio endpoint at http://127.0.0.1:8000/api/portfolio.
 
 ## Validation
 
