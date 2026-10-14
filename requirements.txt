@@ -1,0 +1,16 @@
+streamlit
+pytest
+ruff
+sqlalchemy
+yfinance
+pandas
+numpy
+plotly
+kiteconnect
+python-dotenv
+textblob
+joblib
+shap
+requests
+tensorflow
+scikit-learn

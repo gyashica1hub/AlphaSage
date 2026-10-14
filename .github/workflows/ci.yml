@@ -1,0 +1,43 @@
+name: CI - Build & Check
+
+# Jab bhi main branch pe code push ya PR ho, ye pipeline automatically chalega.
+# Interview mein bolna: "Maine CI/CD pipeline setup kiya hai jo har commit pe
+# automatically code check karta hai - production engineering practice hai."
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  syntax-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies (core only, fast check)
+        run: |
+          python -m pip install --upgrade pip
+          pip install streamlit pandas numpy
+
+      - name: Python syntax check (all files)
+        run: |
+          python -m py_compile app.py
+          python -m py_compile src/*.py
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: syntax-check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t stock-ai-dashboard:test .
