@@ -25,6 +25,7 @@ from src.alerts import check_alerts
 from src.kite_integration import is_kite_configured, fetch_real_holdings
 from src.backtest import evaluate_and_backtest
 from src.explainability import explain_prediction, SHAP_AVAILABLE
+from src.portfolio_analytics import diversification_score, performers, risk_score
 
 # ---------------- Page Config ----------------
 st.set_page_config(page_title="AlphaSage", layout="wide", page_icon=None)
@@ -409,6 +410,26 @@ m3.metric("Total P&L", f"₹{total_pnl:,.0f}" if total_pnl is not None else "Una
 m4.metric("Holdings", f"{len(df_portfolio)}")
 
 st.write("")
+
+# ------------------------------------------------------------------
+# AlphaSage portfolio intelligence cards
+# ------------------------------------------------------------------
+best, worst = performers(portfolio)
+diversification = diversification_score(portfolio)
+risk = risk_score(portfolio)
+
+best_label = f"{best['name']} ({best['pnl_pct']:+.2f}%)" if best else "Unavailable"
+worst_label = f"{worst['name']} ({worst['pnl_pct']:+.2f}%)" if worst else "Unavailable"
+diversification_label = f"{diversification}/100" if diversification is not None else "Unavailable"
+risk_label = f"{risk}/100" if risk is not None else "Unavailable"
+risk_caption = "Lower is better" if risk is not None else "Waiting for market data"
+diversification_caption = "Higher is better" if diversification is not None else "Waiting for market data"
+st.markdown('<div class="section-title">Portfolio Intelligence</div>', unsafe_allow_html=True)
+i1, i2, i3, i4 = st.columns(4)
+i1.metric("Best Performer", best_label)
+i2.metric("Worst Performer", worst_label)
+i3.metric("Diversification Score", diversification_label, diversification_caption)
+i4.metric("Risk Score", risk_label, risk_caption)
 
 
 # ==================================================================
