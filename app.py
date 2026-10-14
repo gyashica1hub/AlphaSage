@@ -65,9 +65,14 @@ st.markdown(f"""
     .brand-title {{ font-size: 32px !important; letter-spacing: -1.4px; color: #F1FFF5 !important; }}
     section[data-testid="stSidebar"] {{ background: #030504 !important; min-width: 300px; max-width: 300px; }}
     section[data-testid="stSidebar"] > div {{ padding: 20px 15px 28px; }}
-    header[data-testid="stHeader"] {{ background: transparent; }}
-    [data-testid="stToolbar"] {{ display: none; }}
-    [data-testid="stDecoration"] {{ display: none; }}
+    header[data-testid="stHeader"] {{ background: #050706 !important; border-bottom: 1px solid #1C3025; }}
+    [data-testid="stToolbar"] {{ background: transparent !important; }}
+    button[data-testid="stSidebarCollapseButton"],
+    button[data-testid="stSidebarOpenButton"] {{
+        display: flex !important; visibility: visible !important; opacity: 1 !important;
+        color: #39E58C !important; background: #0D1711 !important;
+        border: 1px solid #1C3025 !important; border-radius: 8px !important;
+    }}
 
     .stApp {{
         background-color: {T['bg']};
