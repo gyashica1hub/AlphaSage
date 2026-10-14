@@ -261,6 +261,19 @@ with st.sidebar:
 
     st.divider()
 
+    st.markdown("**PLATFORM**")
+    nav_page = st.radio(
+        "Navigation",
+        ["Dashboard", "Scanner", "Global Markets", "Portfolio", "Watchlist", "News", "Research"],
+        index=3,
+        label_visibility="collapsed",
+    )
+    if nav_page != "Portfolio":
+        st.info(f"{nav_page} is part of the AlphaSage workspace and will be enabled as its data service is implemented.")
+        st.stop()
+
+    st.divider()
+
     st.markdown("**DATA SOURCE**")
     kite_available = is_kite_configured()
     if kite_available:
@@ -354,10 +367,42 @@ alerts = check_alerts(portfolio, loss_threshold=loss_threshold, gain_threshold=g
 # ==================================================================
 # HEADER ROW: title + notification bell
 # ==================================================================
-col_title, col_bell = st.columns([5, 1])
+col_title, col_export, col_import, col_bell = st.columns([4.2, 1.2, 1.2, 1])
 with col_title:
-    st.markdown('<p class="app-title">Welcome back</p>', unsafe_allow_html=True)
-    st.markdown('<p class="app-subtitle"><span class="live-dot"></span> Live market data &middot; Here\'s what\'s happening with your portfolio today</p>', unsafe_allow_html=True)
+    st.markdown('<p class="app-title">Portfolio</p>', unsafe_allow_html=True)
+    st.markdown('<p class="app-subtitle"><span class="live-dot"></span> Track holdings, cost basis, allocation, and portfolio intelligence</p>', unsafe_allow_html=True)
+
+with col_export:
+    export_df = pd.DataFrame(portfolio)
+    export_columns = ["symbol", "name", "quantity", "avg_buy_price", "buy_date", "sector"]
+    st.download_button(
+        "Export CSV",
+        export_df.reindex(columns=export_columns).to_csv(index=False),
+        file_name="alphasage-portfolio.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+
+with col_import:
+    uploaded_csv = st.file_uploader("Import CSV", type="csv", label_visibility="collapsed")
+    if uploaded_csv is not None:
+        try:
+            imported = pd.read_csv(uploaded_csv)
+            required = {"symbol", "name", "quantity", "avg_buy_price"}
+            if not required.issubset(imported.columns):
+                st.error("CSV must include symbol, name, quantity, and avg_buy_price columns.")
+            elif st.button("Confirm import", use_container_width=True):
+                for _, item in imported.iterrows():
+                    add_stock(
+                        str(item["symbol"]), str(item.get("name", "")),
+                        float(item["quantity"]), float(item["avg_buy_price"]),
+                        str(item.get("buy_date", date.today())), str(item.get("sector", "Other")),
+                    )
+                st.success("Portfolio imported.")
+                st.cache_data.clear()
+                st.rerun()
+        except (ValueError, TypeError, KeyError) as error:
+            st.error(f"Could not import CSV: {error}")
 
 with col_bell:
     bell_label = f"Notifications ({len(alerts)})" if alerts else "Notifications"
