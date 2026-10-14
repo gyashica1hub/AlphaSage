@@ -45,13 +45,13 @@ LIGHT = {
 }
 
 DARK = {
-    "bg": "#0A0E17", "card": "#131A2A", "border": "#1E293B",
-    "text": "#F1F5F9", "subtext": "#94A3B8", "sidebar_bg": "#0D1420",
-    "up": "#22C55E", "down": "#EF4444", "accent": "#38BDF8",
-    "btn_bg": "#1E3A5F", "btn_text": "#E2E8F0", "btn_hover": "#38BDF8",
-    "notif_loss_bg": "#1F1215", "notif_loss_text": "#FCA5A5",
-    "notif_gain_bg": "#0F1F17", "notif_gain_text": "#86EFAC",
-    "shadow": "rgba(0, 0, 0, 0.3)",
+    "bg": "#050706", "card": "#0D120F", "border": "#1C3025",
+    "text": "#F1F5F2", "subtext": "#8D9B92", "sidebar_bg": "#030504",
+    "up": "#22C55E", "down": "#F05252", "accent": "#39E58C",
+    "btn_bg": "#123B26", "btn_text": "#E9FFF1", "btn_hover": "#1B7A45",
+    "notif_loss_bg": "#241012", "notif_loss_text": "#FCA5A5",
+    "notif_gain_bg": "#0D2417", "notif_gain_text": "#86EFAC",
+    "shadow": "rgba(0, 0, 0, 0.5)",
 }
 
 T = DARK if st.session_state.dark_mode else LIGHT
@@ -560,7 +560,7 @@ with col_donut:
         labels=df_portfolio["name"],
          values=df_portfolio["current_value"].fillna(0),
         hole=0.62,
-        marker=dict(colors=["#16A34A", "#38BDF8", "#F59E0B", "#8B5CF6", "#EC4899", "#0EA5E9", "#EF4444"]),
+         marker=dict(colors=["#22C55E", "#39E58C", "#86EFAC", "#15803D", "#166534", "#4ADE80", "#F05252"]),
         textinfo="none"
     )])
     donut.update_layout(
@@ -773,7 +773,7 @@ compare_symbols = st.multiselect(
 
 if len(compare_symbols) >= 2:
     fig_compare = go.Figure()
-    compare_colors = ["#16A34A", "#38BDF8", "#F59E0B", "#8B5CF6", "#EC4899"]
+    compare_colors = ["#22C55E", "#39E58C", "#86EFAC", "#15803D", "#4ADE80"]
 
     for idx, sym in enumerate(compare_symbols):
         with st.spinner(f"Loading {sym}..."):
