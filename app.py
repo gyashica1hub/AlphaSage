@@ -32,7 +32,7 @@ st.set_page_config(page_title="AlphaSage", layout="wide", page_icon=None)
 
 # ---------------- Theme State ----------------
 if "dark_mode" not in st.session_state:
-    st.session_state.dark_mode = False
+    st.session_state.dark_mode = True
 
 LIGHT = {
     "bg": "#F6F8FB", "card": "#FFFFFF", "border": "#EEF1F6",
@@ -90,7 +90,8 @@ st.markdown(f"""
         text-transform: uppercase; letter-spacing: .6px;
     }}
     div[data-testid="stMetricValue"] {{
-        color: {T['text']}; font-weight: 800; font-size: 26px; letter-spacing: -0.5px;
+        color: {T['text']}; font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+        font-weight: 800; font-size: 26px; letter-spacing: -0.5px;
     }}
     div[data-testid="stMetricDelta"] {{ font-weight: 600; }}
 
@@ -161,6 +162,14 @@ st.markdown(f"""
         border-radius: 10px; border: none; font-weight: 600; padding: 8px 18px;
         transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.15s ease;
         box-shadow: 0 1px 3px {T['shadow']};
+    }}
+    section[data-testid="stSidebar"] div.stButton > button {{
+        justify-content: flex-start; background: transparent; border-color: transparent;
+        color: {T['subtext']} !important; box-shadow: none; border-radius: 10px;
+        font-weight: 600; padding: 8px 12px;
+    }}
+    section[data-testid="stSidebar"] div.stButton > button:hover {{
+        background: {T['card']}; color: {T['text']} !important; border-color: {T['border']};
     }}
     div.stButton > button:hover, [data-testid="stPopover"] > button:hover {{
         background-color: {T['btn_hover']}; color: {T['btn_text']} !important;
@@ -262,17 +271,28 @@ with st.sidebar:
     st.divider()
 
     st.markdown("**PLATFORM**")
-    nav_page = st.radio(
-        "Navigation",
-        ["Dashboard", "Scanner", "Global Markets", "Portfolio", "Watchlist", "News", "Research"],
-        index=3,
-        label_visibility="collapsed",
-    )
+    if "nav_page" not in st.session_state:
+        st.session_state.nav_page = "Portfolio"
+    for nav_item in ["Dashboard", "Scanner", "Global Markets", "Portfolio", "Watchlist", "News", "Research"]:
+        if st.button(nav_item, key=f"nav_{nav_item.lower().replace(' ', '_')}", use_container_width=True):
+            st.session_state.nav_page = nav_item
+            st.rerun()
+    nav_page = st.session_state.nav_page
     if nav_page != "Portfolio":
         st.info(f"{nav_page} is part of the AlphaSage workspace and will be enabled as its data service is implemented.")
         st.stop()
 
     st.divider()
+    st.markdown(
+        '<div class="custom-card"><strong>✦ Get early access</strong><br>'
+        '<span style="color:#94A3B8;font-size:12px">Join the AlphaSage research community for advanced AI features.</span></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="custom-card" style="margin-top:10px"><strong>Guest mode</strong><br>'
+        '<span style="color:#94A3B8;font-size:12px">Sign in to sync your portfolio and watchlist across devices.</span></div>',
+        unsafe_allow_html=True,
+    )
 
     st.markdown("**DATA SOURCE**")
     kite_available = is_kite_configured()
@@ -384,25 +404,26 @@ with col_export:
     )
 
 with col_import:
-    uploaded_csv = st.file_uploader("Import CSV", type="csv", label_visibility="collapsed")
-    if uploaded_csv is not None:
-        try:
-            imported = pd.read_csv(uploaded_csv)
-            required = {"symbol", "name", "quantity", "avg_buy_price"}
-            if not required.issubset(imported.columns):
-                st.error("CSV must include symbol, name, quantity, and avg_buy_price columns.")
-            elif st.button("Confirm import", use_container_width=True):
-                for _, item in imported.iterrows():
-                    add_stock(
-                        str(item["symbol"]), str(item.get("name", "")),
-                        float(item["quantity"]), float(item["avg_buy_price"]),
-                        str(item.get("buy_date", date.today())), str(item.get("sector", "Other")),
-                    )
-                st.success("Portfolio imported.")
-                st.cache_data.clear()
-                st.rerun()
-        except (ValueError, TypeError, KeyError) as error:
-            st.error(f"Could not import CSV: {error}")
+    with st.popover("Import CSV", use_container_width=True):
+        uploaded_csv = st.file_uploader("Choose a portfolio CSV", type="csv")
+        if uploaded_csv is not None:
+            try:
+                imported = pd.read_csv(uploaded_csv)
+                required = {"symbol", "name", "quantity", "avg_buy_price"}
+                if not required.issubset(imported.columns):
+                    st.error("CSV must include symbol, name, quantity, and avg_buy_price columns.")
+                elif st.button("Confirm import", use_container_width=True):
+                    for _, item in imported.iterrows():
+                        add_stock(
+                            str(item["symbol"]), str(item.get("name", "")),
+                            float(item["quantity"]), float(item["avg_buy_price"]),
+                            str(item.get("buy_date", date.today())), str(item.get("sector", "Other")),
+                        )
+                    st.success("Portfolio imported.")
+                    st.cache_data.clear()
+                    st.rerun()
+            except (ValueError, TypeError, KeyError) as error:
+                st.error(f"Could not import CSV: {error}")
 
 with col_bell:
     bell_label = f"Notifications ({len(alerts)})" if alerts else "Notifications"
