@@ -62,6 +62,8 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
     html, body, [class*="css"] {{ font-family: 'Inter', -apple-system, sans-serif; }}
+    .brand-title {{ font-size: 30px !important; letter-spacing: -1.2px; color: #F1FFF5 !important; }}
+    section[data-testid="stSidebar"] {{ background: #030504 !important; }}
     header[data-testid="stHeader"] {{ background: transparent; }}
     [data-testid="stToolbar"] {{ display: none; }}
     [data-testid="stDecoration"] {{ display: none; }}
@@ -174,6 +176,18 @@ st.markdown(f"""
     }}
     [data-testid="stDownloadButton"] button p,
     [data-testid="stPopover"] > button p {{ color: {T['text']} !important; }}
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="input"] > div,
+    div[data-testid="stFileUploader"] section,
+    div[data-testid="stFileUploaderDropzone"] {{
+        background: #0D120F !important; color: #E8FFF0 !important;
+        border-color: #1C3025 !important;
+    }}
+    div[data-baseweb="select"] span,
+    div[data-baseweb="select"] input,
+    div[data-baseweb="input"] input {{ color: #E8FFF0 !important; }}
+    div[data-baseweb="popover"] {{ background: #0D120F !important; border: 1px solid #1C3025 !important; }}
+    [data-testid="stDataFrame"] {{ border: 1px solid #1C3025 !important; border-radius: 14px; overflow: hidden; }}
     section[data-testid="stSidebar"] div.stButton > button {{
         justify-content: flex-start; background: transparent; border-color: transparent;
         color: {T['subtext']} !important; box-shadow: none; border-radius: 10px;
@@ -272,7 +286,7 @@ st.markdown(f"""
 with st.sidebar:
     col_a, col_b = st.columns([3, 1])
     with col_a:
-        st.markdown('<div class="app-title" style="font-size:20px;">AlphaSage</div>', unsafe_allow_html=True)
+        st.markdown('<div class="app-title brand-title">AlphaSage</div>', unsafe_allow_html=True)
         st.caption("AI-powered investment intelligence")
     with col_b:
         dark_toggle = st.toggle("Dark", value=st.session_state.dark_mode, key="dark_mode_toggle")
