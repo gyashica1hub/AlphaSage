@@ -175,13 +175,15 @@ st.markdown(f"""
         box-shadow: 0 1px 3px {T['shadow']};
     }}
     [data-testid="stDownloadButton"] button,
-    [data-testid="stPopover"] > button {{
+    [data-testid="stPopover"] > button,
+    [data-testid="stPopover"] button {{
         background: {T['card']} !important; color: {T['text']} !important;
         border: 1px solid {T['border']} !important; border-radius: 12px !important;
         min-height: 42px; font-weight: 600;
     }}
     [data-testid="stDownloadButton"] button p,
-    [data-testid="stPopover"] > button p {{ color: {T['text']} !important; }}
+    [data-testid="stPopover"] > button p,
+    [data-testid="stPopover"] button p {{ color: {T['text']} !important; }}
     div[data-baseweb="select"] > div,
     div[data-baseweb="input"] > div,
     div[data-testid="stFileUploader"] section,
