@@ -62,16 +62,16 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
     html, body, [class*="css"] {{ font-family: 'Inter', -apple-system, sans-serif; }}
-    .brand-title {{ font-size: 32px !important; letter-spacing: -1.4px; color: #F1FFF5 !important; }}
-    section[data-testid="stSidebar"] {{ background: #030504 !important; min-width: 300px; max-width: 300px; }}
+    .brand-title {{ font-size: 32px !important; letter-spacing: -1.4px; color: {T['text']} !important; }}
+    section[data-testid="stSidebar"] {{ background: {T['sidebar_bg']} !important; min-width: 300px; max-width: 300px; }}
     section[data-testid="stSidebar"] > div {{ padding: 20px 15px 28px; }}
-    header[data-testid="stHeader"] {{ background: #050706 !important; border-bottom: 1px solid #1C3025; }}
+    header[data-testid="stHeader"] {{ background: {T['bg']} !important; border-bottom: 1px solid {T['border']}; }}
     [data-testid="stToolbar"] {{ background: transparent !important; }}
     button[data-testid="stSidebarCollapseButton"],
     button[data-testid="stSidebarOpenButton"] {{
         display: flex !important; visibility: visible !important; opacity: 1 !important;
-        color: #39E58C !important; background: #0D1711 !important;
-        border: 1px solid #1C3025 !important; border-radius: 8px !important;
+        color: {T['accent']} !important; background: {T['card']} !important;
+        border: 1px solid {T['border']} !important; border-radius: 8px !important;
     }}
 
     .stApp {{
@@ -226,6 +226,7 @@ st.markdown(f"""
         display: flex; align-items: center; gap: 8px;
     }}
     .disclaimer-text {{ color: {T['text']}; }}
+    .sidebar-muted {{ color: {T['subtext']} !important; }}
     .section-title::before {{
         content: ""; display: inline-block; width: 4px; height: 16px;
         background: {T['accent']}; border-radius: 3px;
@@ -329,7 +330,7 @@ with st.sidebar:
 
     st.markdown(
         '<div class="custom-card"><strong>✦ Get early access</strong><br>'
-        '<span style="color:#94A3B8;font-size:12px">Join the AlphaSage research community for advanced AI features.</span></div>',
+        '<span class="sidebar-muted" style="font-size:12px">Join the AlphaSage research community for advanced AI features.</span></div>',
         unsafe_allow_html=True,
     )
     st.markdown("**ACCOUNT**")
@@ -340,7 +341,7 @@ with st.sidebar:
     st.markdown(
         '<div class="custom-card guest-mode-card" style="margin-top:10px">'
         '<strong>Guest mode</strong><br>'
-        '<span style="color:#B4C1B8;font-size:12px;line-height:1.6">Sign in to sync your portfolio and watchlist across devices.</span><br>'
+        '<span class="sidebar-muted" style="font-size:12px;line-height:1.6">Sign in to sync your portfolio and watchlist across devices.</span><br>'
         '<span style="display:inline-block;margin-top:10px;color:#39E58C;font-weight:700;font-size:13px">↪&nbsp; Sign in</span></div>',
         unsafe_allow_html=True,
     )
