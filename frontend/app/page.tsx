@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import {
-  Bell, Bot, BriefcaseBusiness, ChevronDown, Download, Globe2, LayoutDashboard,
-  LineChart, Newspaper, Plus, Search, Settings2, ShieldCheck, Sparkles,
+  Bell, Bot, BriefcaseBusiness, ChevronDown, Database, Download, Globe2, LayoutDashboard,
+  LineChart, Newspaper, Plus, Search, Settings, Settings2, ShieldCheck, Sparkles,
   Upload, WalletCards, Watch
 } from "lucide-react";
 
@@ -16,13 +16,16 @@ const holdings = [
 ];
 
 const navigation = [
-  { label: "Dashboard", icon: LayoutDashboard, group: "Workspace" },
-  { label: "Market scanner", icon: Search, group: "Workspace" },
+  { label: "Dashboard", icon: LayoutDashboard, group: "Platform" },
+  { label: "Scanner", icon: Search, group: "Platform" },
   { label: "Global markets", icon: Globe2, group: "Markets" },
   { label: "Portfolio", icon: BriefcaseBusiness, group: "Markets", active: true },
   { label: "Watchlists", icon: Watch, group: "Markets" },
   { label: "News intelligence", icon: Newspaper, group: "Markets" },
-  { label: "AI research", icon: Bot, group: "Intelligence" }
+  { label: "Blog", icon: Newspaper, group: "Markets" },
+  { label: "Pricing", icon: WalletCards, group: "Account" },
+  { label: "Data coverage", icon: Database, group: "Account" },
+  { label: "Settings", icon: Settings, group: "Account" }
 ];
 
 export default function Home() {
@@ -36,11 +39,11 @@ export default function Home() {
           <div><strong>AlphaSage</strong><span>INVESTMENT INTELLIGENCE</span></div>
         </div>
 
-        <div className="sidebar-label">Workspace</div>
+        <div className="sidebar-label">Platform</div>
         {navigation.map(({ label, icon: Icon, group, active: defaultActive }) => (
           <div key={label}>
             {(group === "Markets" && label === "Global markets") ||
-            (group === "Intelligence" && label === "AI research") ? <div className="sidebar-label group-gap">{group}</div> : null}
+            (group === "Account" && label === "Pricing") ? <div className="sidebar-label group-gap">{group}</div> : null}
             <button className={active === label || (defaultActive && active === "Portfolio") ? "nav-item active" : "nav-item"} onClick={() => setActive(label)}>
               <Icon size={17} /><span>{label}</span>
               {label === "AI research" && <span className="new-badge">NEW</span>}
