@@ -84,11 +84,11 @@ export default function Home() {
   useEffect(() => {
     if (!showAdd) { setStockSuggestions([]); return; }
     const query = stockSearchQuery.trim().toLowerCase();
-    if (query.length < 1) { setStockSuggestions(stockDirectory.slice(0, 8)); setStockSearching(false); return; }
+    const searchTerm = query.length < 1 ? "nifty100" : stockSearchQuery;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setStockSearching(true);
-      fetch(`${apiUrl.replace(/\/portfolio$/, "")}/stocks/search?q=${encodeURIComponent(stockSearchQuery)}`, { signal: controller.signal })
+      fetch(`${apiUrl.replace(/\/portfolio$/, "")}/stocks/search?q=${encodeURIComponent(searchTerm)}`, { signal: controller.signal })
         .then((response) => response.ok ? response.json() : Promise.reject(new Error("Search unavailable")))
         .then((data) => {
           const localMatches = stockDirectory.filter((stock) => `${stock.symbol} ${stock.name}`.toLowerCase().includes(query)).slice(0, 8);
