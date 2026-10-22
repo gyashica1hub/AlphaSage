@@ -27,6 +27,15 @@ const stockDirectory = [
   ["NVDA", "NVIDIA", "Technology"], ["TSLA", "Tesla", "Consumer"],
 ].map(([symbol, name, sector]) => ({ symbol, name, sector }));
 
+async function searchLocalTop100(query: string): Promise<StockOption[]> {
+  const response = await fetch("/nifty100_universe.csv");
+  if (!response.ok) return [];
+  const rows = (await response.text()).split(/\r?\n/).slice(1).filter(Boolean);
+  const normalized = query.trim().toLowerCase();
+  const showAll = ["nse", "nifty100", "nifty 100", "top100", "top 100"].includes(normalized);
+  return rows.map((line) => line.split(",")).map(([name, sector, symbol]) => ({ symbol: `${symbol}.NS`, name, sector: sector || "Other", exchange: "NIFTY 100" })).filter((stock) => showAll || `${stock.symbol} ${stock.name}`.toLowerCase().includes(normalized)).slice(0, 100);
+}
+
 type Holding = typeof fallbackHoldings[number] & { quantity?: number; avg_buy_price?: number; buy_date?: string };
 type PortfolioResponse = { holdings: Holding[]; summary: Record<string, any> };
 type StockOption = { symbol: string; name: string; sector: string; exchange?: string };
@@ -90,11 +99,12 @@ export default function Home() {
       setStockSearching(true);
       fetch(`${apiUrl.replace(/\/portfolio$/, "")}/stocks/search?q=${encodeURIComponent(searchTerm)}`, { signal: controller.signal })
         .then((response) => response.ok ? response.json() : Promise.reject(new Error("Search unavailable")))
-        .then((data) => {
+        .then(async (data) => {
           const localMatches = stockDirectory.filter((stock) => `${stock.symbol} ${stock.name}`.toLowerCase().includes(query)).slice(0, 8);
-          setStockSuggestions(data.results?.length ? data.results : localMatches);
+          const localUniverse = await searchLocalTop100(searchTerm);
+          setStockSuggestions(data.results?.length ? data.results : localUniverse.length ? localUniverse : localMatches);
         })
-        .catch((error) => { if (error.name !== "AbortError") setStockSuggestions(stockDirectory.filter((stock) => `${stock.symbol} ${stock.name}`.toLowerCase().includes(query)).slice(0, 8)); })
+        .catch(async (error) => { if (error.name !== "AbortError") { const localUniverse = await searchLocalTop100(searchTerm); setStockSuggestions(localUniverse.length ? localUniverse : stockDirectory.filter((stock) => `${stock.symbol} ${stock.name}`.toLowerCase().includes(query)).slice(0, 8)); } })
         .finally(() => { if (!controller.signal.aborted) setStockSearching(false); });
     }, 180);
     return () => { window.clearTimeout(timer); controller.abort(); };
