@@ -81,12 +81,17 @@ export default function Home() {
   useEffect(() => { if (portfolio?.holdings) setHoldings(portfolio.holdings); }, [portfolio]);
 
   useEffect(() => {
-    if (!showAdd || stockSearchQuery.trim().length < 2) { setStockSuggestions([]); return; }
+    if (!showAdd) { setStockSuggestions([]); return; }
+    const query = stockSearchQuery.trim().toLowerCase();
+    if (query.length < 2) { setStockSuggestions(stockDirectory.slice(0, 8)); return; }
     const timer = window.setTimeout(() => {
       fetch(`${apiUrl.replace(/\/portfolio$/, "")}/stocks/search?q=${encodeURIComponent(stockSearchQuery)}`)
         .then((response) => response.ok ? response.json() : Promise.reject(new Error("Search unavailable")))
-        .then((data) => setStockSuggestions(data.results || []))
-        .catch(() => setStockSuggestions(stockDirectory.filter((stock) => `${stock.symbol} ${stock.name}`.toLowerCase().includes(stockSearchQuery.toLowerCase())).slice(0, 8)));
+        .then((data) => {
+          const localMatches = stockDirectory.filter((stock) => `${stock.symbol} ${stock.name}`.toLowerCase().includes(query)).slice(0, 8);
+          setStockSuggestions(data.results?.length ? data.results : localMatches);
+        })
+        .catch(() => setStockSuggestions(stockDirectory.filter((stock) => `${stock.symbol} ${stock.name}`.toLowerCase().includes(query)).slice(0, 8)));
     }, 280);
     return () => window.clearTimeout(timer);
   }, [apiUrl, showAdd, stockSearchQuery]);
