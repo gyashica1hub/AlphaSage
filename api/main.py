@@ -85,7 +85,7 @@ def search_stocks(q: str) -> dict:
                 symbol = (row.get("Symbol") or "").strip()
                 name = (row.get("Company Name") or "").strip()
                 industry = (row.get("Industry") or "Other").strip()
-                show_all = normalized in {"ns", "nse", "nifty100", "nifty 100", "top100", "top 100"}
+                show_all = normalized in {"nse", "nifty100", "nifty 100", "top100", "top 100"}
                 if symbol and name and (show_all or normalized in symbol.lower() or normalized in name.lower()):
                     local_results.append({"symbol": f"{symbol}.NS", "name": name, "sector": industry, "exchange": "NIFTY 100"})
         if local_results:
