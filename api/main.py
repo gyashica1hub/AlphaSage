@@ -27,6 +27,10 @@ class HoldingCreate(BaseModel):
     sector: str = Field(default="Other", max_length=80)
 
 
+class HoldingsImport(BaseModel):
+    holdings: list[HoldingCreate]
+
+
 def _portfolio_response() -> dict:
     raw = load_portfolio_raw()
     enriched = get_portfolio_with_live_prices(raw["holdings"])
@@ -68,6 +72,18 @@ def create_holding(holding: HoldingCreate) -> dict:
         holding.symbol, holding.name, holding.quantity, holding.avg_buy_price,
         holding.buy_date or "", holding.sector,
     )
+    return _portfolio_response()
+
+
+@app.post("/api/portfolio/import", status_code=201)
+def import_holdings(payload: HoldingsImport) -> dict:
+    if not payload.holdings:
+        raise HTTPException(status_code=400, detail="No holdings supplied")
+    for holding in payload.holdings:
+        add_stock(
+            holding.symbol, holding.name, holding.quantity, holding.avg_buy_price,
+            holding.buy_date or "", holding.sector,
+        )
     return _portfolio_response()
 
 

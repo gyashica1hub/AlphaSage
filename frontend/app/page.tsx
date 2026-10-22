@@ -15,7 +15,7 @@ const fallbackHoldings = [
   { symbol: "TATAMOTORS.NS", name: "Tata Motors", sector: "Industrials", price: "Unavailable", return: "—", tone: "muted", weight: "12.4%" }
 ];
 
-type Holding = typeof fallbackHoldings[number];
+type Holding = typeof fallbackHoldings[number] & { quantity?: number; avg_buy_price?: number; buy_date?: string };
 type PortfolioResponse = { holdings: Holding[]; summary: Record<string, any> };
 
 const navigation = [
@@ -38,10 +38,11 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
-  const [newHolding, setNewHolding] = useState({ symbol: "", name: "", sector: "Technology" });
+  const [newHolding, setNewHolding] = useState({ symbol: "", name: "", sector: "Technology", quantity: "1", avg_buy_price: "100" });
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/portfolio";
 
   useEffect(() => {
-    fetch(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/portfolio")
+    fetch(apiUrl)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("API unavailable")))
       .then((data) => {
         const total = data.summary.total_value || 0;
@@ -65,23 +66,28 @@ export default function Home() {
   const money = (value: number | null | undefined) => value == null ? "—" : `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 
   const exportCsv = () => {
-    const rows = holdings.map((item) => [item.symbol, item.name, item.sector, item.price, item.return, item.weight]);
-    const csv = [["symbol", "name", "sector", "market_price", "return", "allocation"], ...rows].map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\n");
+    const rows = holdings.map((item) => [item.symbol, item.name, item.sector, item.quantity || 1, item.avg_buy_price || 0, item.buy_date || "", item.price, item.return, item.weight]);
+    const csv = [["symbol", "name", "sector", "quantity", "avg_buy_price", "buy_date", "market_price", "return", "allocation"], ...rows].map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a"); link.href = url; link.download = "alphasage-portfolio.csv"; link.click(); URL.revokeObjectURL(url);
   };
   const importCsv = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]; if (!file) return;
     file.text().then((text) => {
-      const parsed = text.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(",").map((value) => value.replace(/^"|"$/g, ""))).filter((row) => row[0]).map((row) => ({ symbol: row[0], name: row[1] || row[0], sector: row[2] || "Unclassified", price: row[3] || "Unavailable", return: row[4] || "â€”", tone: row[4]?.startsWith("-") ? "negative" : "positive", weight: row[5] || "â€”" }));
-      if (parsed.length) setHoldings(parsed as Holding[]);
+      const parsed = text.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(",").map((value) => value.replace(/^"|"$/g, ""))).filter((row) => row[0]).map((row) => ({ symbol: row[0], name: row[1] || row[0], sector: row[2] || "Unclassified", quantity: Number(row[3]) || 1, avg_buy_price: Number(row[4]) || 1, buy_date: row[5] || "", price: row[6] || "Unavailable", return: row[7] || "â€”", tone: row[7]?.startsWith("-") ? "negative" : "positive", weight: row[8] || "â€”" }));
+      if (parsed.length) {
+        setHoldings(parsed as Holding[]);
+        fetch(`${apiUrl}/import`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ holdings: parsed.map(({ symbol, name, sector, quantity, avg_buy_price, buy_date }) => ({ symbol, name, sector, quantity, avg_buy_price, buy_date })) }) }).catch(() => undefined);
+      }
     });
     event.target.value = "";
   };
   const addHolding = () => {
     if (!newHolding.symbol.trim() || !newHolding.name.trim()) return;
-    setHoldings((current) => [...current, { symbol: newHolding.symbol.trim().toUpperCase(), name: newHolding.name.trim(), sector: newHolding.sector, price: "Unavailable", return: "â€”", tone: "muted", weight: "â€”" }]);
-    setNewHolding({ symbol: "", name: "", sector: "Technology" }); setShowAdd(false);
+    const payload = { symbol: newHolding.symbol.trim().toUpperCase(), name: newHolding.name.trim(), sector: newHolding.sector, quantity: Number(newHolding.quantity), avg_buy_price: Number(newHolding.avg_buy_price), buy_date: new Date().toISOString().slice(0, 10) };
+    if (!payload.quantity || !payload.avg_buy_price) return;
+    fetch(`${apiUrl}/holdings`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).then((response) => { if (!response.ok) throw new Error("Unable to save holding"); return response.json(); }).then((data) => { setPortfolio(data); setHoldings(data.holdings); setShowAdd(false); }).catch(() => setHoldings((current) => [...current, { ...payload, price: "Unavailable", return: "â€”", tone: "muted", weight: "â€”" }] as Holding[]));
+    setNewHolding({ symbol: "", name: "", sector: "Technology", quantity: "1", avg_buy_price: "100" });
   };
   const refreshPortfolio = () => { setRefreshing(true); window.location.reload(); };
 
@@ -160,7 +166,7 @@ export default function Home() {
           <div className="table-head"><span>Holding</span><span>Sector</span><span>Market price</span><span>Return</span><span>Allocation</span><span /></div>
           {holdings.map((holding) => <div className="holding-row" key={holding.symbol}><div className="holding-name"><div className="ticker-icon">{holding.symbol.slice(0, 2)}</div><div><strong>{holding.name}</strong><small>{holding.symbol}</small></div></div><span className="muted">{holding.sector}</span><span className={holding.price === "Unavailable" ? "muted" : ""}>{holding.price}</span><span className={holding.tone}>{holding.return}</span><div className="allocation"><span>{holding.weight}</span><i><em style={{ width: holding.weight }} /></i></div><button className="row-menu">•••</button></div>)}
         </section>
-        {showAdd && <div className="modal-backdrop" onClick={() => setShowAdd(false)}><section className="add-modal" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><div className="kicker">PORTFOLIO ACTION</div><h2>Add holding</h2></div><button className="icon-button" onClick={() => setShowAdd(false)}>×</button></div><p className="modal-copy">Add a symbol to your workspace. Live pricing will be connected when the market provider recognizes it.</p><label>Symbol<input value={newHolding.symbol} onChange={(event) => setNewHolding({ ...newHolding, symbol: event.target.value })} placeholder="e.g. AAPL or RELIANCE.NS" /></label><label>Company name<input value={newHolding.name} onChange={(event) => setNewHolding({ ...newHolding, name: event.target.value })} placeholder="Company name" /></label><label>Sector<select value={newHolding.sector} onChange={(event) => setNewHolding({ ...newHolding, sector: event.target.value })}><option>Technology</option><option>Financials</option><option>Energy</option><option>Healthcare</option><option>Industrials</option><option>Consumer</option><option>Unclassified</option></select></label><div className="modal-actions"><button className="secondary" onClick={() => setShowAdd(false)}>Cancel</button><button className="primary" onClick={addHolding}>Add to portfolio</button></div></section></div>}
+        {showAdd && <div className="modal-backdrop" onClick={() => setShowAdd(false)}><section className="add-modal" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><div className="kicker">PORTFOLIO ACTION</div><h2>Add holding</h2></div><button className="icon-button" onClick={() => setShowAdd(false)}>×</button></div><p className="modal-copy">Add a symbol to your workspace. Live pricing will be connected when the market provider recognizes it.</p><label>Symbol<input value={newHolding.symbol} onChange={(event) => setNewHolding({ ...newHolding, symbol: event.target.value })} placeholder="e.g. AAPL or RELIANCE.NS" /></label><label>Company name<input value={newHolding.name} onChange={(event) => setNewHolding({ ...newHolding, name: event.target.value })} placeholder="Company name" /></label><div className="form-row"><label>Quantity<input type="number" min="0.01" step="0.01" value={newHolding.quantity} onChange={(event) => setNewHolding({ ...newHolding, quantity: event.target.value })} /></label><label>Average buy price<input type="number" min="0.01" step="0.01" value={newHolding.avg_buy_price} onChange={(event) => setNewHolding({ ...newHolding, avg_buy_price: event.target.value })} /></label></div><label>Sector<select value={newHolding.sector} onChange={(event) => setNewHolding({ ...newHolding, sector: event.target.value })}><option>Technology</option><option>Financials</option><option>Energy</option><option>Healthcare</option><option>Industrials</option><option>Consumer</option><option>Unclassified</option></select></label><div className="modal-actions"><button className="secondary" onClick={() => setShowAdd(false)}>Cancel</button><button className="primary" onClick={addHolding}>Add to portfolio</button></div></section></div>}
         </> : <WorkspacePage active={active} />}
       </section>
     </main>
