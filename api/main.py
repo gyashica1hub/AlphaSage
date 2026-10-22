@@ -3,6 +3,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+import yfinance as yf
 
 from src.fetch_prices import get_portfolio_with_live_prices
 from src.portfolio_analytics import diversification_score, performers, risk_score
@@ -64,6 +65,31 @@ def health() -> dict:
 @app.get("/api/portfolio")
 def get_portfolio() -> dict:
     return _portfolio_response()
+
+
+@app.get("/api/stocks/search")
+def search_stocks(q: str) -> dict:
+    query = q.strip()
+    if len(query) < 2:
+        return {"results": []}
+    try:
+        quotes = yf.Search(query).quotes or []
+        results = []
+        for quote in quotes:
+            if quote.get("quoteType") not in {"EQUITY", "ETF"}:
+                continue
+            symbol = quote.get("symbol")
+            name = quote.get("longname") or quote.get("shortname") or symbol
+            if symbol and name:
+                results.append({
+                    "symbol": symbol,
+                    "name": name,
+                    "sector": "Other",
+                    "exchange": quote.get("exchange", ""),
+                })
+        return {"results": results[:20]}
+    except Exception:
+        return {"results": []}
 
 
 @app.post("/api/portfolio/holdings", status_code=201)

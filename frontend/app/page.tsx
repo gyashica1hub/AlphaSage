@@ -29,6 +29,7 @@ const stockDirectory = [
 
 type Holding = typeof fallbackHoldings[number] & { quantity?: number; avg_buy_price?: number; buy_date?: string };
 type PortfolioResponse = { holdings: Holding[]; summary: Record<string, any> };
+type StockOption = { symbol: string; name: string; sector: string; exchange?: string };
 
 const navigation = [
   { label: "Dashboard", icon: LayoutDashboard, group: "Platform" },
@@ -52,6 +53,10 @@ export default function Home() {
   const [showAdd, setShowAdd] = useState(false);
   const [newHolding, setNewHolding] = useState({ symbol: "", name: "", sector: "Technology", quantity: "1", avg_buy_price: "100" });
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/portfolio";
+  const [stockSearchQuery, setStockSearchQuery] = useState("");
+  const [stockSuggestions, setStockSuggestions] = useState<StockOption[]>([]);
+  const [stockSearchOpen, setStockSearchOpen] = useState(false);
+  const [stockSearchField, setStockSearchField] = useState<"symbol" | "name" | null>(null);
 
   useEffect(() => {
     fetch(apiUrl)
@@ -74,6 +79,17 @@ export default function Home() {
   }, []);
 
   useEffect(() => { if (portfolio?.holdings) setHoldings(portfolio.holdings); }, [portfolio]);
+
+  useEffect(() => {
+    if (!showAdd || stockSearchQuery.trim().length < 2) { setStockSuggestions([]); return; }
+    const timer = window.setTimeout(() => {
+      fetch(`${apiUrl.replace(/\/portfolio$/, "")}/stocks/search?q=${encodeURIComponent(stockSearchQuery)}`)
+        .then((response) => response.ok ? response.json() : Promise.reject(new Error("Search unavailable")))
+        .then((data) => setStockSuggestions(data.results || []))
+        .catch(() => setStockSuggestions(stockDirectory.filter((stock) => `${stock.symbol} ${stock.name}`.toLowerCase().includes(stockSearchQuery.toLowerCase())).slice(0, 8)));
+    }, 280);
+    return () => window.clearTimeout(timer);
+  }, [apiUrl, showAdd, stockSearchQuery]);
   const summary = portfolio?.summary;
   const money = (value: number | null | undefined) => value == null ? "—" : `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 
@@ -102,10 +118,16 @@ export default function Home() {
     setNewHolding({ symbol: "", name: "", sector: "Technology", quantity: "1", avg_buy_price: "100" });
   };
   const selectStock = (value: string, field: "symbol" | "name") => {
+    setStockSearchQuery(value);
+    setStockSearchOpen(true);
     const search = value.trim().toLowerCase();
     const match = stockDirectory.find((stock) => stock[field].toLowerCase() === search);
     if (match) setNewHolding((current) => ({ ...current, symbol: match.symbol, name: match.name, sector: match.sector }));
     else setNewHolding((current) => ({ ...current, [field]: value }));
+  };
+  const chooseStock = (stock: StockOption) => {
+    setNewHolding((current) => ({ ...current, symbol: stock.symbol, name: stock.name, sector: stock.sector || "Other" }));
+    setStockSearchQuery(""); setStockSearchOpen(false);
   };
   const refreshPortfolio = () => { setRefreshing(true); window.location.reload(); };
 
@@ -184,7 +206,7 @@ export default function Home() {
           <div className="table-head"><span>Holding</span><span>Sector</span><span>Market price</span><span>Return</span><span>Allocation</span><span /></div>
           {holdings.map((holding) => <div className="holding-row" key={holding.symbol}><div className="holding-name"><div className="ticker-icon">{holding.symbol.slice(0, 2)}</div><div><strong>{holding.name}</strong><small>{holding.symbol}</small></div></div><span className="muted">{holding.sector}</span><span className={holding.price === "Unavailable" ? "muted" : ""}>{holding.price}</span><span className={holding.tone}>{holding.return}</span><div className="allocation"><span>{holding.weight}</span><i><em style={{ width: holding.weight }} /></i></div><button className="row-menu">•••</button></div>)}
         </section>
-        {showAdd && <div className="modal-backdrop" onClick={() => setShowAdd(false)}><section className="add-modal" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><div className="kicker">PORTFOLIO ACTION</div><h2>Add holding</h2></div><button className="icon-button" onClick={() => setShowAdd(false)}>×</button></div><p className="modal-copy">Search by symbol or company name. Selecting a result fills the matching details automatically.</p><label>Symbol<input list="stock-symbols" value={newHolding.symbol} onChange={(event) => selectStock(event.target.value, "symbol")} placeholder="Search symbol, e.g. AAPL" /><datalist id="stock-symbols">{stockDirectory.map((stock) => <option key={stock.symbol} value={stock.symbol}>{stock.name}</option>)}</datalist></label><label>Company name<input list="stock-companies" value={newHolding.name} onChange={(event) => selectStock(event.target.value, "name")} placeholder="Search company name" /><datalist id="stock-companies">{stockDirectory.map((stock) => <option key={stock.name} value={stock.name}>{stock.symbol}</option>)}</datalist></label><div className="form-row"><label>Quantity<input type="number" min="0.01" step="0.01" value={newHolding.quantity} onChange={(event) => setNewHolding({ ...newHolding, quantity: event.target.value })} /></label><label>Average buy price<input type="number" min="0.01" step="0.01" value={newHolding.avg_buy_price} onChange={(event) => setNewHolding({ ...newHolding, avg_buy_price: event.target.value })} /></label></div><label>Sector<select value={newHolding.sector} onChange={(event) => setNewHolding({ ...newHolding, sector: event.target.value })}><option>Technology</option><option>Financials</option><option>Energy</option><option>Healthcare</option><option>Industrials</option><option>Consumer</option><option>Unclassified</option></select></label><div className="modal-actions"><button className="secondary" onClick={() => setShowAdd(false)}>Cancel</button><button className="primary" onClick={addHolding}>Add to portfolio</button></div></section></div>}
+        {showAdd && <div className="modal-backdrop" onClick={() => { setShowAdd(false); setStockSearchOpen(false); }}><section className="add-modal" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><div className="kicker">PORTFOLIO ACTION</div><h2>Add holding</h2></div><button className="icon-button" onClick={() => setShowAdd(false)}>×</button></div><p className="modal-copy">Search the market by symbol or company name. Select a result to fill the details automatically.</p><StockSearchField label="Symbol" value={newHolding.symbol} placeholder="Search symbol, e.g. AAPL" onChange={(value) => selectStock(value, "symbol")} onFocus={() => { setStockSearchField("symbol"); setStockSearchQuery(newHolding.symbol); setStockSearchOpen(true); }} open={stockSearchOpen && stockSearchField === "symbol"} suggestions={stockSuggestions} onSelect={chooseStock} /><StockSearchField label="Company name" value={newHolding.name} placeholder="Search company name" onChange={(value) => selectStock(value, "name")} onFocus={() => { setStockSearchField("name"); setStockSearchQuery(newHolding.name); setStockSearchOpen(true); }} open={stockSearchOpen && stockSearchField === "name"} suggestions={stockSuggestions} onSelect={chooseStock} /><div className="form-row"><label>Quantity<input type="number" min="0.01" step="0.01" value={newHolding.quantity} onChange={(event) => setNewHolding({ ...newHolding, quantity: event.target.value })} /></label><label>Average buy price<input type="number" min="0.01" step="0.01" value={newHolding.avg_buy_price} onChange={(event) => setNewHolding({ ...newHolding, avg_buy_price: event.target.value })} /></label></div><label>Sector<select value={newHolding.sector} onChange={(event) => setNewHolding({ ...newHolding, sector: event.target.value })}><option>Technology</option><option>Financials</option><option>Energy</option><option>Healthcare</option><option>Industrials</option><option>Consumer</option><option>Unclassified</option></select></label><div className="modal-actions"><button className="secondary" onClick={() => setShowAdd(false)}>Cancel</button><button className="primary" onClick={addHolding}>Add to portfolio</button></div></section></div>}
         </> : <WorkspacePage active={active} />}
       </section>
     </main>
@@ -196,6 +218,10 @@ function Metric({ label, value, detail, tone = "" }: { label: string; value: str
 }
 function Insight({ label, value, detail, tone = "" }: { label: string; value: string; detail: string; tone?: string }) {
   return <article className="insight-card"><span>{label}</span><strong className={tone}>{value}</strong><small className={tone}>{detail}</small></article>;
+}
+
+function StockSearchField({ label, value, placeholder, onChange, onFocus, open, suggestions, onSelect }: { label: string; value: string; placeholder: string; onChange: (value: string) => void; onFocus: () => void; open: boolean; suggestions: StockOption[]; onSelect: (stock: StockOption) => void }) {
+  return <label className="stock-search-field">{label}<div className="stock-search-control"><Search size={15} /><input value={value} onChange={(event) => onChange(event.target.value)} onFocus={onFocus} placeholder={placeholder} /></div>{open && suggestions.length > 0 && <div className="stock-results">{suggestions.map((stock) => <button type="button" className="stock-result" key={`${stock.symbol}-${stock.name}`} onMouseDown={(event) => event.preventDefault()} onClick={() => onSelect(stock)}><span><strong>{stock.symbol}</strong><small>{stock.name}</small></span><em>{stock.exchange || stock.sector}</em></button>)}</div>}{open && value.length > 1 && suggestions.length === 0 && <div className="stock-results empty-results">No matching instruments found</div>}</label>;
 }
 
 function WorkspacePage({ active }: { active: string }) {
