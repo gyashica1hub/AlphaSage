@@ -1,5 +1,8 @@
 """FastAPI entry point for the AlphaSage web frontend."""
 
+import csv
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -10,6 +13,7 @@ from src.portfolio_analytics import diversification_score, performers, risk_scor
 from src.portfolio_manager import add_stock, load_portfolio_raw, remove_stock
 
 app = FastAPI(title="AlphaSage API", version="0.1.0")
+NSE_UNIVERSE_FILE = Path(__file__).resolve().parents[1] / "data" / "nse_equity.csv"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -70,8 +74,21 @@ def get_portfolio() -> dict:
 @app.get("/api/stocks/search")
 def search_stocks(q: str) -> dict:
     query = q.strip()
-    if len(query) < 2:
+    normalized = query.lower()
+    if len(query) < 1:
         return {"results": []}
+    local_results = []
+    if NSE_UNIVERSE_FILE.exists():
+        with NSE_UNIVERSE_FILE.open(newline="", encoding="utf-8-sig") as file:
+            for row in csv.DictReader(file):
+                symbol = (row.get("SYMBOL") or "").strip()
+                name = (row.get("NAME OF COMPANY") or "").strip()
+                if symbol and name and (normalized == "nse" or normalized in symbol.lower() or normalized in name.lower()):
+                    local_results.append({"symbol": f"{symbol}.NS", "name": name, "sector": "Other", "exchange": "NSE"})
+                    if len(local_results) >= 25:
+                        break
+    if local_results:
+        return {"results": local_results}
     try:
         quotes = yf.Search(query).quotes or []
         results = []
