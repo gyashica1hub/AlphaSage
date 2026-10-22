@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { ChangeEvent, useEffect, useState } from "react";
 import {
   Bell, Bot, BriefcaseBusiness, ChevronDown, Database, Download, Globe2, LayoutDashboard,
   LineChart, Newspaper, Plus, Search, Settings, Settings2, ShieldCheck, Sparkles,
@@ -34,7 +34,11 @@ const navigation = [
 export default function Home() {
   const [active, setActive] = useState("Portfolio");
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
+  const [holdings, setHoldings] = useState<Holding[]>(fallbackHoldings);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newHolding, setNewHolding] = useState({ symbol: "", name: "", sector: "Technology" });
 
   useEffect(() => {
     fetch(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/portfolio")
@@ -56,9 +60,30 @@ export default function Home() {
       .finally(() => setLoading(false));
   }, []);
 
-  const holdings = portfolio?.holdings || fallbackHoldings;
+  useEffect(() => { if (portfolio?.holdings) setHoldings(portfolio.holdings); }, [portfolio]);
   const summary = portfolio?.summary;
   const money = (value: number | null | undefined) => value == null ? "—" : `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+
+  const exportCsv = () => {
+    const rows = holdings.map((item) => [item.symbol, item.name, item.sector, item.price, item.return, item.weight]);
+    const csv = [["symbol", "name", "sector", "market_price", "return", "allocation"], ...rows].map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a"); link.href = url; link.download = "alphasage-portfolio.csv"; link.click(); URL.revokeObjectURL(url);
+  };
+  const importCsv = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]; if (!file) return;
+    file.text().then((text) => {
+      const parsed = text.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(",").map((value) => value.replace(/^"|"$/g, ""))).filter((row) => row[0]).map((row) => ({ symbol: row[0], name: row[1] || row[0], sector: row[2] || "Unclassified", price: row[3] || "Unavailable", return: row[4] || "â€”", tone: row[4]?.startsWith("-") ? "negative" : "positive", weight: row[5] || "â€”" }));
+      if (parsed.length) setHoldings(parsed as Holding[]);
+    });
+    event.target.value = "";
+  };
+  const addHolding = () => {
+    if (!newHolding.symbol.trim() || !newHolding.name.trim()) return;
+    setHoldings((current) => [...current, { symbol: newHolding.symbol.trim().toUpperCase(), name: newHolding.name.trim(), sector: newHolding.sector, price: "Unavailable", return: "â€”", tone: "muted", weight: "â€”" }]);
+    setNewHolding({ symbol: "", name: "", sector: "Technology" }); setShowAdd(false);
+  };
+  const refreshPortfolio = () => { setRefreshing(true); window.location.reload(); };
 
   return (
     <main className="app-shell">
@@ -103,7 +128,7 @@ export default function Home() {
         {active === "Portfolio" ? <>
         <div className="page-header">
           <div><div className="kicker">PERSONAL WORKSPACE</div><h1>Portfolio</h1><p>Track holdings, understand exposure, and make better-informed decisions.</p></div>
-          <div className="header-actions"><button className="secondary"><Download size={16} /> Export CSV</button><button className="secondary"><Upload size={16} /> Import CSV</button><button className="primary"><Plus size={17} /> Add holding</button></div>
+          <div className="header-actions"><button className="secondary" onClick={exportCsv}><Download size={16} /> Export CSV</button><label className="secondary file-button"><Upload size={16} /> Import CSV<input type="file" accept=".csv,text/csv" onChange={importCsv} /></label><button className="primary" onClick={() => setShowAdd(true)}><Plus size={17} /> Add holding</button></div>
         </div>
 
         <div className="disclaimer"><ShieldCheck size={16} /><span><strong>Research tool only.</strong> Market data may be delayed or incomplete. This is not financial advice.</span><button>Learn more</button></div>
@@ -128,13 +153,14 @@ export default function Home() {
           <Insight label="Risk score" value={summary?.risk_score == null ? "—" : `${summary.risk_score}/100`} detail="Lower concentration is better" />
         </section>
 
-        <div className="section-heading"><div><div className="kicker">POSITIONS</div><h2>Holdings</h2></div><button className="secondary compact"><LineChart size={15} /> Refresh prices</button></div>
+        <div className="section-heading"><div><div className="kicker">POSITIONS</div><h2>Holdings</h2></div><div className="section-actions"><button className="secondary compact" onClick={refreshPortfolio} disabled={refreshing}><LineChart size={15} /> {refreshing ? "Refreshing" : "Refresh prices"}</button><button className="secondary compact" onClick={() => setHoldings(fallbackHoldings)}>Try demo portfolio</button></div></div>
 
         <section className="holdings-card">
           <div className="table-toolbar"><div className="table-title">All positions <span>{holdings.length}</span></div><div className="table-tools"><button className="filter-button">All sectors <ChevronDown size={14} /></button><button className="icon-button"><Settings2 size={16} /></button></div></div>
           <div className="table-head"><span>Holding</span><span>Sector</span><span>Market price</span><span>Return</span><span>Allocation</span><span /></div>
           {holdings.map((holding) => <div className="holding-row" key={holding.symbol}><div className="holding-name"><div className="ticker-icon">{holding.symbol.slice(0, 2)}</div><div><strong>{holding.name}</strong><small>{holding.symbol}</small></div></div><span className="muted">{holding.sector}</span><span className={holding.price === "Unavailable" ? "muted" : ""}>{holding.price}</span><span className={holding.tone}>{holding.return}</span><div className="allocation"><span>{holding.weight}</span><i><em style={{ width: holding.weight }} /></i></div><button className="row-menu">•••</button></div>)}
         </section>
+        {showAdd && <div className="modal-backdrop" onClick={() => setShowAdd(false)}><section className="add-modal" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><div className="kicker">PORTFOLIO ACTION</div><h2>Add holding</h2></div><button className="icon-button" onClick={() => setShowAdd(false)}>×</button></div><p className="modal-copy">Add a symbol to your workspace. Live pricing will be connected when the market provider recognizes it.</p><label>Symbol<input value={newHolding.symbol} onChange={(event) => setNewHolding({ ...newHolding, symbol: event.target.value })} placeholder="e.g. AAPL or RELIANCE.NS" /></label><label>Company name<input value={newHolding.name} onChange={(event) => setNewHolding({ ...newHolding, name: event.target.value })} placeholder="Company name" /></label><label>Sector<select value={newHolding.sector} onChange={(event) => setNewHolding({ ...newHolding, sector: event.target.value })}><option>Technology</option><option>Financials</option><option>Energy</option><option>Healthcare</option><option>Industrials</option><option>Consumer</option><option>Unclassified</option></select></label><div className="modal-actions"><button className="secondary" onClick={() => setShowAdd(false)}>Cancel</button><button className="primary" onClick={addHolding}>Add to portfolio</button></div></section></div>}
         </> : <WorkspacePage active={active} />}
       </section>
     </main>
