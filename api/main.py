@@ -14,6 +14,7 @@ from src.portfolio_manager import add_stock, load_portfolio_raw, remove_stock
 
 app = FastAPI(title="AlphaSage API", version="0.1.0")
 NSE_UNIVERSE_FILE = Path(__file__).resolve().parents[1] / "data" / "nse_equity.csv"
+NIFTY100_UNIVERSE_FILE = Path(__file__).resolve().parents[1] / "data" / "nifty100_universe.csv"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -78,6 +79,17 @@ def search_stocks(q: str) -> dict:
     if len(query) < 1:
         return {"results": []}
     local_results = []
+    if NIFTY100_UNIVERSE_FILE.exists():
+        with NIFTY100_UNIVERSE_FILE.open(newline="", encoding="utf-8-sig") as file:
+            for row in csv.DictReader(file):
+                symbol = (row.get("Symbol") or "").strip()
+                name = (row.get("Company Name") or "").strip()
+                industry = (row.get("Industry") or "Other").strip()
+                show_all = normalized in {"ns", "nse", "nifty100", "nifty 100", "top100", "top 100"}
+                if symbol and name and (show_all or normalized in symbol.lower() or normalized in name.lower()):
+                    local_results.append({"symbol": f"{symbol}.NS", "name": name, "sector": industry, "exchange": "NIFTY 100"})
+        if local_results:
+            return {"results": local_results[:100]}
     if NSE_UNIVERSE_FILE.exists():
         with NSE_UNIVERSE_FILE.open(newline="", encoding="utf-8-sig") as file:
             for row in csv.DictReader(file):
