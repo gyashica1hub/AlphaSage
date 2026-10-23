@@ -1,16 +1,21 @@
 """FastAPI entry point for the AlphaSage web frontend."""
 
 import csv
+import os
 from pathlib import Path
 
+import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import yfinance as yf
+from dotenv import load_dotenv
 
 from src.fetch_prices import get_portfolio_with_live_prices
 from src.portfolio_analytics import diversification_score, performers, risk_score
 from src.portfolio_manager import add_stock, load_portfolio_raw, remove_stock
+
+load_dotenv()
 
 app = FastAPI(title="AlphaSage API", version="0.1.0")
 NSE_UNIVERSE_FILE = Path(__file__).resolve().parents[1] / "data" / "nse_equity.csv"
@@ -72,6 +77,34 @@ def get_portfolio() -> dict:
     return _portfolio_response()
 
 
+def _finnhub_search(query: str) -> list[dict]:
+    token = os.getenv("FINNHUB_API_KEY")
+    if not token:
+        return []
+    try:
+        response = requests.get(
+            "https://finnhub.io/api/v1/search",
+            params={"q": query, "token": token},
+            timeout=5,
+        )
+        response.raise_for_status()
+        results = []
+        for item in response.json().get("result", []):
+            symbol = item.get("symbol")
+            name = item.get("description")
+            kind = item.get("type", "").upper()
+            if symbol and name and kind in {"COMMON STOCK", "ETP", "ETF"}:
+                results.append({
+                    "symbol": symbol,
+                    "name": name,
+                    "sector": "Other",
+                    "exchange": item.get("displaySymbol", "Global"),
+                })
+        return results[:20]
+    except (requests.RequestException, ValueError):
+        return []
+
+
 @app.get("/api/stocks/search")
 def search_stocks(q: str) -> dict:
     query = q.strip()
@@ -101,6 +134,9 @@ def search_stocks(q: str) -> dict:
                         break
     if local_results:
         return {"results": local_results}
+    finnhub_results = _finnhub_search(query)
+    if finnhub_results:
+        return {"results": finnhub_results}
     try:
         quotes = yf.Search(query).quotes or []
         results = []
