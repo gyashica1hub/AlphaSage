@@ -112,7 +112,7 @@ def search_stocks(q: str) -> dict:
     if len(query) < 1:
         return {"results": []}
     local_results = []
-    if NIFTY100_UNIVERSE_FILE.exists():
+    if normalized != "nse" and NIFTY100_UNIVERSE_FILE.exists():
         with NIFTY100_UNIVERSE_FILE.open(newline="", encoding="utf-8-sig") as file:
             for row in csv.DictReader(file):
                 symbol = (row.get("Symbol") or "").strip()
@@ -130,10 +130,10 @@ def search_stocks(q: str) -> dict:
                 name = (row.get("NAME OF COMPANY") or "").strip()
                 if symbol and name and (normalized == "nse" or normalized in symbol.lower() or normalized in name.lower()):
                     local_results.append({"symbol": f"{symbol}.NS", "name": name, "sector": "Other", "exchange": "NSE"})
-                    if len(local_results) >= 25:
+                    if normalized != "nse" and len(local_results) >= 25:
                         break
     if local_results:
-        return {"results": local_results}
+        return {"results": local_results[:5000]}
     finnhub_results = _finnhub_search(query)
     if finnhub_results:
         return {"results": finnhub_results}

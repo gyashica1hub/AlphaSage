@@ -28,12 +28,12 @@ const stockDirectory = [
 ].map(([symbol, name, sector]) => ({ symbol, name, sector }));
 
 async function searchLocalTop100(query: string): Promise<StockOption[]> {
-  const response = await fetch("/nifty100_universe.csv");
+  const response = await fetch("/equity_universe.csv");
   if (!response.ok) return [];
   const rows = (await response.text()).split(/\r?\n/).slice(1).filter(Boolean);
   const normalized = query.trim().toLowerCase();
-  const showAll = ["nse", "nifty100", "nifty 100", "top100", "top 100"].includes(normalized);
-  return rows.map((line) => line.split(",")).map(([name, sector, symbol]) => ({ symbol: `${symbol}.NS`, name, sector: sector || "Other", exchange: "NIFTY 100" })).filter((stock) => showAll || `${stock.symbol} ${stock.name}`.toLowerCase().includes(normalized)).slice(0, 100);
+  const showAll = normalized === "nse";
+  return rows.map((line) => line.split(",")).map(([symbol, name]) => ({ symbol: `${symbol}.NS`, name, sector: "Other", exchange: "NSE" })).filter((stock) => showAll || `${stock.symbol} ${stock.name}`.toLowerCase().includes(normalized)).slice(0, 5000);
 }
 
 type Holding = typeof fallbackHoldings[number] & { quantity?: number; avg_buy_price?: number; buy_date?: string };
@@ -93,7 +93,7 @@ export default function Home() {
   useEffect(() => {
     if (!showAdd) { setStockSuggestions([]); return; }
     const query = stockSearchQuery.trim().toLowerCase();
-    const searchTerm = query.length < 1 ? "nifty100" : stockSearchQuery;
+    const searchTerm = query.length < 1 ? "nse" : stockSearchQuery;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setStockSearching(true);
