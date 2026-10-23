@@ -157,6 +157,31 @@ def search_stocks(q: str) -> dict:
         return {"results": []}
 
 
+@app.get("/api/stocks/details")
+def stock_details(symbol: str) -> dict:
+    ticker = symbol.strip().upper()
+    token = os.getenv("FINNHUB_API_KEY")
+    if token:
+        try:
+            quote = requests.get("https://finnhub.io/api/v1/quote", params={"symbol": ticker.replace(".NS", ""), "token": token}, timeout=5).json()
+            profile = requests.get("https://finnhub.io/api/v1/stock/profile2", params={"symbol": ticker.replace(".NS", ""), "token": token}, timeout=5).json()
+            if quote.get("c"):
+                return {"symbol": ticker, "name": profile.get("name") or ticker, "exchange": profile.get("exchange") or "Global", "sector": profile.get("finnhubIndustry") or "Other", "price": quote.get("c"), "change": quote.get("d"), "change_pct": quote.get("dp"), "high": quote.get("h"), "low": quote.get("l"), "previous_close": quote.get("pc"), "status": "Live provider data"}
+        except (requests.RequestException, ValueError):
+            pass
+    try:
+        history = yf.Ticker(ticker).history(period="5d")
+        if not history.empty:
+            latest = history.iloc[-1]
+            price = float(latest["Close"])
+            previous = float(history.iloc[-2]["Close"]) if len(history) > 1 else price
+            change = price - previous
+            return {"symbol": ticker, "name": ticker, "exchange": "Yahoo Finance", "sector": "Other", "price": round(price, 2), "change": round(change, 2), "change_pct": round(change / previous * 100, 2) if previous else 0, "high": float(latest["High"]), "low": float(latest["Low"]), "previous_close": round(previous, 2), "volume": int(latest["Volume"]), "status": "Delayed provider data"}
+    except Exception:
+        pass
+    return {"symbol": ticker, "name": ticker, "exchange": "Unknown", "sector": "Other", "price": None, "status": "Price unavailable"}
+
+
 @app.post("/api/portfolio/holdings", status_code=201)
 def create_holding(holding: HoldingCreate) -> dict:
     add_stock(
