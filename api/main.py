@@ -2,20 +2,31 @@
 
 import csv
 import os
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import requests
-from fastapi import FastAPI, HTTPException
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import yfinance as yf
 from dotenv import load_dotenv
 
 from src.fetch_prices import get_portfolio_with_live_prices
+from src.logging_config import configure_logging
+from src.db.models import Alert, Note, Transaction, User, Watchlist, WatchlistItem
+from src.db.sqlite import initialize_database
+from src.db.session import get_session
+from src.auth import create_password_reset_otp, create_session_token, create_user, find_user_by_email, hash_password, read_session_token, verify_password, verify_password_reset_otp
+from src.email_service import send_password_reset_otp
+import logging
 from src.portfolio_analytics import diversification_score, performers, risk_score
 from src.portfolio_manager import add_stock, load_portfolio_raw, remove_stock
 
 load_dotenv()
+configure_logging()
+initialize_database()
 
 app = FastAPI(title="AlphaSage API", version="0.1.0")
 NSE_UNIVERSE_FILE = Path(__file__).resolve().parents[1] / "data" / "nse_equity.csv"
@@ -23,6 +34,7 @@ NIFTY100_UNIVERSE_FILE = Path(__file__).resolve().parents[1] / "data" / "nifty10
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|172\.\d+\.\d+\.\d+)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,8 +54,120 @@ class HoldingsImport(BaseModel):
     holdings: list[HoldingCreate]
 
 
-def _portfolio_response() -> dict:
-    raw = load_portfolio_raw()
+class TransactionCreate(BaseModel):
+    symbol: str = Field(min_length=1, max_length=30)
+    side: str = Field(pattern="^(BUY|SELL)$")
+    quantity: float = Field(gt=0)
+    price: float = Field(ge=0)
+    executed_at: datetime | None = None
+
+
+class WatchlistCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+
+class WatchlistItemCreate(BaseModel):
+    symbol: str = Field(min_length=1, max_length=30)
+
+
+class NoteCreate(BaseModel):
+    symbol: str | None = Field(default=None, max_length=30)
+    body: str = Field(min_length=1, max_length=5000)
+
+
+class AlertCreate(BaseModel):
+    symbol: str = Field(min_length=1, max_length=30)
+    rule: str = Field(min_length=1, max_length=50)
+    threshold: float
+
+
+class RegisterRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=200)
+    password: str = Field(min_length=8, max_length=200)
+    display_name: str | None = Field(default=None, max_length=100)
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=200)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class PasswordResetRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=200)
+
+
+class PasswordResetConfirm(BaseModel):
+    email: str = Field(min_length=5, max_length=200)
+    otp: str = Field(pattern=r"^\d{6}$")
+    password: str = Field(min_length=8, max_length=200)
+
+
+@app.post("/api/auth/register", status_code=201)
+def register(payload: RegisterRequest, response: Response) -> dict:
+    if find_user_by_email(payload.email):
+        raise HTTPException(status_code=409, detail="Email is already registered")
+    user = create_user(payload.email, payload.password, payload.display_name)
+    response.set_cookie("alphasage_session", create_session_token(user.id), httponly=True, samesite="lax", secure=False, max_age=604800)
+    return {"id": user.id, "email": user.email, "display_name": user.display_name}
+
+
+@app.post("/api/auth/login")
+def login(payload: LoginRequest, response: Response) -> dict:
+    user = find_user_by_email(payload.email)
+    if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    response.set_cookie("alphasage_session", create_session_token(user.id), httponly=True, samesite="lax", secure=False, max_age=604800)
+    return {"id": user.id, "email": user.email, "display_name": user.display_name}
+
+
+@app.post("/api/auth/logout")
+def logout(response: Response) -> dict:
+    response.delete_cookie("alphasage_session")
+    return {"status": "signed_out"}
+
+
+@app.get("/api/auth/me")
+def current_user(alphasage_session: str | None = Cookie(default=None)) -> dict:
+    user_id = read_session_token(alphasage_session or "")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    with get_session() as session:
+        user = session.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=401, detail="Session user not found")
+        return {"id": user.id, "email": user.email, "display_name": user.display_name}
+
+
+@app.post("/api/auth/forgot-password")
+def forgot_password(payload: PasswordResetRequest) -> dict:
+    user = find_user_by_email(payload.email)
+    # Do not reveal whether an email exists.
+    if user:
+        otp = create_password_reset_otp(user.id)
+        try:
+            send_password_reset_otp(user.email, otp)
+        except Exception:
+            logging.getLogger(__name__).exception("password_reset_email_failed")
+    return {"message": "If an account exists, a reset code has been sent to your email."}
+
+
+@app.post("/api/auth/reset-password")
+def reset_password(payload: PasswordResetConfirm) -> dict:
+    user_id = verify_password_reset_otp(payload.email, payload.otp)
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Reset link is invalid or expired")
+    with get_session() as session:
+        user = session.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=400, detail="Reset link is invalid or expired")
+        user.password_hash = hash_password(payload.password)
+        user.updated_at = datetime.now(UTC)
+        session.commit()
+    return {"message": "Password updated successfully"}
+
+
+def _portfolio_response(user_id: str = "demo-user") -> dict:
+    raw = load_portfolio_raw(user_id)
     enriched = get_portfolio_with_live_prices(raw["holdings"])
     best, worst = performers(enriched)
     invested = sum(item["invested_value"] for item in enriched)
@@ -72,9 +196,121 @@ def health() -> dict:
     return {"status": "ok", "service": "alphasage-api"}
 
 
+def require_user(alphasage_session: str | None = Cookie(default=None)) -> User:
+    user_id = read_session_token(alphasage_session or "")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    with get_session() as session:
+        user = session.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=401, detail="Session user not found")
+        return user
+
+
 @app.get("/api/portfolio")
-def get_portfolio() -> dict:
-    return _portfolio_response()
+def get_portfolio(user: User = Depends(require_user)) -> dict:
+    return _portfolio_response(user.id)
+
+
+@app.post("/api/portfolio/transactions", status_code=201)
+def create_transaction(transaction: TransactionCreate, user: User = Depends(require_user)) -> dict:
+    portfolio_id = load_portfolio_raw(user.id)["portfolio_id"]
+    with get_session() as session:
+        session.add(Transaction(
+            id=str(uuid.uuid4()), portfolio_id=portfolio_id,
+            symbol=transaction.symbol.upper(), side=transaction.side,
+            quantity=transaction.quantity, price=transaction.price,
+            executed_at=transaction.executed_at or datetime.now(UTC),
+        ))
+        session.commit()
+    return {"status": "created", "portfolio_id": portfolio_id}
+
+
+@app.get("/api/portfolio/transactions")
+def list_transactions(user: User = Depends(require_user)) -> list[dict]:
+    portfolio_id = load_portfolio_raw(user.id)["portfolio_id"]
+    with get_session() as session:
+        rows = session.query(Transaction).filter(Transaction.portfolio_id == portfolio_id).order_by(Transaction.executed_at.desc()).all()
+        return [
+            {"id": row.id, "symbol": row.symbol, "side": row.side, "quantity": row.quantity, "price": row.price, "executed_at": row.executed_at.isoformat()}
+            for row in rows
+        ]
+
+
+@app.get("/api/watchlists")
+def get_watchlists(user: User = Depends(require_user)) -> list[dict]:
+    with get_session() as session:
+        rows = session.query(Watchlist).filter(Watchlist.user_id == user.id).all()
+        return [{"id": row.id, "name": row.name} for row in rows]
+
+
+@app.post("/api/watchlists", status_code=201)
+def create_watchlist(payload: WatchlistCreate, user: User = Depends(require_user)) -> dict:
+    now = datetime.now(UTC)
+    row = Watchlist(id=str(uuid.uuid4()), user_id=user.id, name=payload.name, created_at=now, updated_at=now)
+    with get_session() as session:
+        session.add(row)
+        session.commit()
+    return {"id": row.id, "name": row.name}
+
+
+@app.get("/api/watchlists/{watchlist_id}/items")
+def get_watchlist_items(watchlist_id: str, user: User = Depends(require_user)) -> list[dict]:
+    with get_session() as session:
+        owned = session.query(Watchlist).filter(Watchlist.id == watchlist_id, Watchlist.user_id == user.id).first()
+        if owned is None:
+            raise HTTPException(status_code=404, detail="Watchlist not found")
+        rows = session.query(WatchlistItem).filter(WatchlistItem.watchlist_id == watchlist_id).all()
+        return [{"id": row.id, "symbol": row.symbol, "created_at": row.created_at.isoformat()} for row in rows]
+
+
+@app.post("/api/watchlists/{watchlist_id}/items", status_code=201)
+def add_watchlist_item(watchlist_id: str, payload: WatchlistItemCreate, user: User = Depends(require_user)) -> dict:
+    with get_session() as session:
+        owned = session.query(Watchlist).filter(Watchlist.id == watchlist_id, Watchlist.user_id == user.id).first()
+        if owned is None:
+            raise HTTPException(status_code=404, detail="Watchlist not found")
+        row = WatchlistItem(id=str(uuid.uuid4()), watchlist_id=watchlist_id, symbol=payload.symbol.upper(), created_at=datetime.now(UTC))
+        session.add(row)
+        try:
+            session.commit()
+        except Exception as error:
+            session.rollback()
+            raise HTTPException(status_code=409, detail="Symbol already exists in watchlist") from error
+        return {"id": row.id, "symbol": row.symbol}
+
+
+@app.post("/api/notes", status_code=201)
+def create_note(payload: NoteCreate, user: User = Depends(require_user)) -> dict:
+    now = datetime.now(UTC)
+    row = Note(id=str(uuid.uuid4()), user_id=user.id, symbol=payload.symbol, body=payload.body, created_at=now, updated_at=now)
+    with get_session() as session:
+        session.add(row)
+        session.commit()
+    return {"id": row.id, "symbol": row.symbol, "body": row.body}
+
+
+@app.get("/api/notes")
+def get_notes(user: User = Depends(require_user)) -> list[dict]:
+    with get_session() as session:
+        rows = session.query(Note).filter(Note.user_id == user.id).order_by(Note.created_at.desc()).all()
+        return [{"id": row.id, "symbol": row.symbol, "body": row.body, "created_at": row.created_at.isoformat()} for row in rows]
+
+
+@app.post("/api/alerts", status_code=201)
+def create_alert(payload: AlertCreate, user: User = Depends(require_user)) -> dict:
+    row = Alert(id=str(uuid.uuid4()), user_id=user.id, symbol=payload.symbol.upper(), rule=payload.rule, threshold=payload.threshold, active=True, created_at=datetime.now(UTC))
+    with get_session() as session:
+        session.add(row)
+        session.commit()
+    return {"id": row.id, "symbol": row.symbol, "rule": row.rule, "threshold": row.threshold, "active": row.active}
+
+
+@app.get("/api/alerts")
+def get_alerts(user: User = Depends(require_user)) -> list[dict]:
+    with get_session() as session:
+        rows = session.query(Alert).filter(Alert.user_id == user.id).order_by(Alert.created_at.desc()).all()
+        return [{"id": row.id, "symbol": row.symbol, "rule": row.rule, "threshold": row.threshold, "active": row.active} for row in rows]
 
 
 def _finnhub_search(query: str) -> list[dict]:
@@ -105,6 +341,49 @@ def _finnhub_search(query: str) -> list[dict]:
         return []
 
 
+def _indianapi_stock_data(symbol: str) -> dict | None:
+    """Fetch an Indian equity quote without exposing the provider key to the browser."""
+    token = os.getenv("INDIAN_API_KEY")
+    if not token:
+        return None
+    clean_symbol = symbol.upper().replace(".NS", "").replace(".BO", "")
+    base_url = os.getenv("INDIAN_API_BASE_URL", "https://dev.indianapi.in").rstrip("/")
+    try:
+        response = requests.get(
+            f"{base_url}/get_stock_data",
+            params={"stock_name": clean_symbol},
+            headers={"X-API-Key": token},
+            timeout=6,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        data = payload.get(clean_symbol, payload) if isinstance(payload, dict) else {}
+        if not isinstance(data, dict):
+            return None
+        price = data.get("ltp") or data.get("last_price") or data.get("close") or data.get("current_price")
+        if price is None:
+            return None
+        previous = data.get("previous_close") or data.get("prev_close") or data.get("previousClose")
+        change = data.get("change") or data.get("day_change")
+        change_pct = data.get("change_percent") or data.get("day_change_percent") or data.get("pChange")
+        if change_pct is None and change is not None and previous:
+            change_pct = float(change) / float(previous) * 100
+        return {
+            "symbol": symbol.upper(),
+            "name": data.get("company_name") or data.get("name") or symbol.upper(),
+            "exchange": "NSE",
+            "sector": data.get("sector") or "Other",
+            "price": float(price),
+            "change": float(change) if change is not None else None,
+            "change_pct": float(change_pct) if change_pct is not None else None,
+            "high": data.get("day_high") or data.get("high"),
+            "low": data.get("day_low") or data.get("low"),
+            "previous_close": previous,
+            "volume": data.get("volume"),
+            "status": "IndianAPI market data",
+        }
+    except (requests.RequestException, ValueError, TypeError):
+        return None
 @app.get("/api/stocks/search")
 def search_stocks(q: str) -> dict:
     query = q.strip()
@@ -160,6 +439,9 @@ def search_stocks(q: str) -> dict:
 @app.get("/api/stocks/details")
 def stock_details(symbol: str) -> dict:
     ticker = symbol.strip().upper()
+    indian_data = _indianapi_stock_data(ticker)
+    if indian_data:
+        return indian_data
     token = os.getenv("FINNHUB_API_KEY")
     if token:
         try:
@@ -183,31 +465,50 @@ def stock_details(symbol: str) -> dict:
 
 
 @app.post("/api/portfolio/holdings", status_code=201)
-def create_holding(holding: HoldingCreate) -> dict:
+def create_holding(holding: HoldingCreate, user: User = Depends(require_user)) -> dict:
     add_stock(
         holding.symbol, holding.name, holding.quantity, holding.avg_buy_price,
-        holding.buy_date or "", holding.sector,
+        holding.buy_date or "", holding.sector, user.id,
     )
-    return _portfolio_response()
+    portfolio_id = load_portfolio_raw(user.id)["portfolio_id"]
+    with get_session() as session:
+        session.add(Transaction(
+            id=str(uuid.uuid4()), portfolio_id=portfolio_id,
+            symbol=holding.symbol.upper(), side="BUY",
+            quantity=holding.quantity, price=holding.avg_buy_price,
+            executed_at=datetime.fromisoformat(holding.buy_date) if holding.buy_date else datetime.now(UTC),
+        ))
+        session.commit()
+    return _portfolio_response(user.id)
 
 
 @app.post("/api/portfolio/import", status_code=201)
-def import_holdings(payload: HoldingsImport) -> dict:
+def import_holdings(payload: HoldingsImport, user: User = Depends(require_user)) -> dict:
     if not payload.holdings:
         raise HTTPException(status_code=400, detail="No holdings supplied")
     for holding in payload.holdings:
         add_stock(
             holding.symbol, holding.name, holding.quantity, holding.avg_buy_price,
-            holding.buy_date or "", holding.sector,
+            holding.buy_date or "", holding.sector, user.id,
         )
-    return _portfolio_response()
+    portfolio_id = load_portfolio_raw(user.id)["portfolio_id"]
+    with get_session() as session:
+        for holding in payload.holdings:
+            session.add(Transaction(
+                id=str(uuid.uuid4()), portfolio_id=portfolio_id,
+                symbol=holding.symbol.upper(), side="BUY",
+                quantity=holding.quantity, price=holding.avg_buy_price,
+                executed_at=datetime.fromisoformat(holding.buy_date) if holding.buy_date else datetime.now(UTC),
+            ))
+        session.commit()
+    return _portfolio_response(user.id)
 
 
 @app.delete("/api/portfolio/holdings/{symbol}")
-def delete_holding(symbol: str) -> dict:
-    existing = {item["symbol"] for item in load_portfolio_raw()["holdings"]}
+def delete_holding(symbol: str, user: User = Depends(require_user)) -> dict:
+    existing = {item["symbol"] for item in load_portfolio_raw(user.id)["holdings"]}
     normalized = symbol.upper()
     if normalized not in existing:
         raise HTTPException(status_code=404, detail="Holding not found")
-    remove_stock(normalized)
-    return _portfolio_response()
+    remove_stock(normalized, user.id)
+    return _portfolio_response(user.id)

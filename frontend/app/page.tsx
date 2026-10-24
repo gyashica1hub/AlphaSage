@@ -2,7 +2,7 @@
 
 import { ChangeEvent, useEffect, useState } from "react";
 import {
-  Bell, Bot, BriefcaseBusiness, ChevronDown, Database, Download, Globe2, LayoutDashboard,
+  Bell, BriefcaseBusiness, ChevronDown, Database, Download, Globe2, LayoutDashboard,
   LineChart, Newspaper, Plus, Search, Settings, Settings2, ShieldCheck, Sparkles,
   Upload, WalletCards, Watch
 } from "lucide-react";
@@ -40,6 +40,7 @@ type Holding = typeof fallbackHoldings[number] & { quantity?: number; avg_buy_pr
 type PortfolioResponse = { holdings: Holding[]; summary: Record<string, any> };
 type StockOption = { symbol: string; name: string; sector: string; exchange?: string };
 type StockDetails = StockOption & { price?: number | null; change?: number; change_pct?: number; high?: number; low?: number; previous_close?: number; volume?: number; status: string };
+type AuthUser = { id: string; email: string; display_name?: string | null };
 
 const navigation = [
   { label: "Dashboard", icon: LayoutDashboard, group: "Platform" },
@@ -62,7 +63,7 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [newHolding, setNewHolding] = useState({ symbol: "", name: "", sector: "Technology", quantity: "1", avg_buy_price: "100" });
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/portfolio";
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || (typeof window !== "undefined" ? `http://${window.location.hostname}:8000/api/portfolio` : "http://localhost:8000/api/portfolio");
   const [stockSearchQuery, setStockSearchQuery] = useState("");
   const [stockSuggestions, setStockSuggestions] = useState<StockOption[]>([]);
   const [stockSearchOpen, setStockSearchOpen] = useState(false);
@@ -70,9 +71,34 @@ export default function Home() {
   const [stockSearching, setStockSearching] = useState(false);
   const [stockDetails, setStockDetails] = useState<StockDetails | null>(null);
   const [stockDetailsLoading, setStockDetailsLoading] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authForm, setAuthForm] = useState({ email: "", password: "", display_name: "" });
+  const [authError, setAuthError] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [resetOtp, setResetOtp] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    fetch(apiUrl)
+    if (!stockDetails) return;
+    const timeout = window.setTimeout(() => setStockDetails(null), 5_000);
+    return () => window.clearTimeout(timeout);
+  }, [stockDetails]);
+
+  useEffect(() => {
+    fetch(`${apiUrl.replace(/\/portfolio$/, "")}/auth/me`, { credentials: "include" })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Not signed in")))
+      .then((user) => setAuthUser(user))
+      .catch(() => setAuthUser(null))
+      .finally(() => setAuthChecked(true));
+  }, [apiUrl]);
+
+  useEffect(() => {
+    if (!authUser) return;
+    fetch(apiUrl, { credentials: "include" })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("API unavailable")))
       .then((data) => {
         const total = data.summary.total_value || 0;
@@ -89,7 +115,7 @@ export default function Home() {
       })
       .catch(() => setPortfolio(null))
       .finally(() => setLoading(false));
-  }, []);
+  }, [apiUrl, authUser]);
 
   useEffect(() => { if (portfolio?.holdings) setHoldings(portfolio.holdings); }, [portfolio]);
 
@@ -127,7 +153,7 @@ export default function Home() {
       const parsed = text.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(",").map((value) => value.replace(/^"|"$/g, ""))).filter((row) => row[0]).map((row) => ({ symbol: row[0], name: row[1] || row[0], sector: row[2] || "Unclassified", quantity: Number(row[3]) || 1, avg_buy_price: Number(row[4]) || 1, buy_date: row[5] || "", price: row[6] || "Unavailable", return: row[7] || "â€”", tone: row[7]?.startsWith("-") ? "negative" : "positive", weight: row[8] || "â€”" }));
       if (parsed.length) {
         setHoldings(parsed as Holding[]);
-        fetch(`${apiUrl}/import`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ holdings: parsed.map(({ symbol, name, sector, quantity, avg_buy_price, buy_date }) => ({ symbol, name, sector, quantity, avg_buy_price, buy_date })) }) }).catch(() => undefined);
+      fetch(`${apiUrl}/import`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ holdings: parsed.map(({ symbol, name, sector, quantity, avg_buy_price, buy_date }) => ({ symbol, name, sector, quantity, avg_buy_price, buy_date })) }) }).catch(() => undefined);
       }
     });
     event.target.value = "";
@@ -136,7 +162,7 @@ export default function Home() {
     if (!newHolding.symbol.trim() || !newHolding.name.trim()) return;
     const payload = { symbol: newHolding.symbol.trim().toUpperCase(), name: newHolding.name.trim(), sector: newHolding.sector, quantity: Number(newHolding.quantity), avg_buy_price: Number(newHolding.avg_buy_price), buy_date: new Date().toISOString().slice(0, 10) };
     if (!payload.quantity || !payload.avg_buy_price) return;
-    fetch(`${apiUrl}/holdings`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).then((response) => { if (!response.ok) throw new Error("Unable to save holding"); return response.json(); }).then((data) => { setPortfolio(data); setHoldings(data.holdings); setShowAdd(false); }).catch(() => setHoldings((current) => [...current, { ...payload, price: "Unavailable", return: "â€”", tone: "muted", weight: "â€”" }] as Holding[]));
+    fetch(`${apiUrl}/holdings`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).then((response) => { if (!response.ok) throw new Error("Unable to save holding"); return response.json(); }).then((data) => { setPortfolio(data); setHoldings(data.holdings); setShowAdd(false); }).catch(() => setHoldings((current) => [...current, { ...payload, price: "Unavailable", return: "â€”", tone: "muted", weight: "â€”" }] as Holding[]));
     setNewHolding({ symbol: "", name: "", sector: "Technology", quantity: "1", avg_buy_price: "100" });
   };
   const selectStock = (value: string, field: "symbol" | "name") => {
@@ -161,6 +187,45 @@ export default function Home() {
     setStockSearchOpen(false); setStockSearchQuery("");
   };
   const refreshPortfolio = () => { setRefreshing(true); window.location.reload(); };
+  const removeHolding = (symbol: string) => {
+    const encodedSymbol = encodeURIComponent(symbol);
+    fetch(`${apiUrl}/holdings/${encodedSymbol}`, { method: "DELETE", credentials: "include" })
+      .then((response) => response.ok ? response.json() : response.json().then((body) => Promise.reject(new Error(body.detail || "Unable to remove holding"))))
+      .then((data) => { setPortfolio(data); setHoldings(data.holdings); })
+      .catch((error) => window.alert(error.message || "Unable to remove holding"));
+  };
+  const submitAuth = () => {
+    setAuthError("");
+    const endpoint = authMode === "login" ? "/auth/login" : "/auth/register";
+    fetch(`${apiUrl.replace(/\/portfolio$/, "")}${endpoint}`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(authForm) })
+      .then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.detail || "Authentication failed"); return body; })
+      .then((user) => { setAuthUser(user); setShowAuth(false); setAuthForm({ email: "", password: "", display_name: "" }); })
+      .catch((error) => setAuthError(error.message));
+  };
+  const requestPasswordReset = (email: string) => {
+    setAuthError("");
+    setAuthNotice("");
+    fetch(`${apiUrl.replace(/\/portfolio$/, "")}/auth/forgot-password`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) })
+      .then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.detail || "Unable to send reset email"); return body; })
+      .then((body) => setAuthNotice(body.message))
+      .then(() => setOtpSent(true))
+      .catch((error) => setAuthError(error.message));
+  };
+  const submitOtpReset = () => {
+    setAuthError("");
+    fetch(`${apiUrl.replace(/\/portfolio$/, "")}/auth/reset-password`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: authForm.email, otp: resetOtp, password: resetPassword }) })
+      .then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.detail || "Invalid or expired OTP"); return body; })
+      .then((body) => { setAuthNotice(body.message); setOtpSent(false); setResetOtp(""); setResetPassword(""); setAuthMode("login"); })
+      .catch((error) => setAuthError(error.message));
+  };
+  const signOut = () => {
+    fetch(`${apiUrl.replace(/\/portfolio$/, "")}/auth/logout`, { method: "POST", credentials: "include" })
+      .finally(() => setAuthUser(null));
+  };
+
+  if (!authChecked || !authUser) {
+    return <AuthGate mode={authMode} form={authForm} error={authError} notice={authNotice} otpSent={otpSent} otp={resetOtp} resetPassword={resetPassword} onOtpChange={setResetOtp} onResetPasswordChange={setResetPassword} onModeChange={(mode) => { setAuthMode(mode); setAuthError(""); setAuthNotice(""); setOtpSent(false); }} onChange={setAuthForm} onSubmit={submitAuth} onForgot={requestPasswordReset} onOtpSubmit={submitOtpReset} />;
+  }
 
   return (
     <main className="app-shell">
@@ -190,9 +255,9 @@ export default function Home() {
           <button>Join the waitlist <ChevronDown size={14} /></button>
         </div>
         <div className="guest-card">
-          <span className="status-dot" /> Guest workspace
-          <p>Sign in to sync your portfolio across devices.</p>
-          <button className="sign-in">Sign in <ChevronDown size={14} /></button>
+          <span className="status-dot" /> {authUser ? authUser.display_name || authUser.email : "Guest workspace"}
+          <p>{authUser ? "Your workspace is signed in and ready to sync." : "Sign in to sync your portfolio across devices."}</p>
+          <button className="sign-in" onClick={() => { if (authUser) signOut(); else { setAuthMode("login"); setShowAuth(true); } }}>{authUser ? "Sign out" : "Sign in"} <ChevronDown size={14} /></button>
         </div>
       </aside>
 
@@ -235,14 +300,19 @@ export default function Home() {
         <section className="holdings-card">
           <div className="table-toolbar"><div className="table-title">All positions <span>{holdings.length}</span></div><div className="table-tools"><button className="filter-button">All sectors <ChevronDown size={14} /></button><button className="icon-button"><Settings2 size={16} /></button></div></div>
           <div className="table-head"><span>Holding</span><span>Sector</span><span>Market price</span><span>Return</span><span>Allocation</span><span /></div>
-          {holdings.map((holding) => <div className="holding-row" key={holding.symbol}><div className="holding-name"><div className="ticker-icon">{holding.symbol.slice(0, 2)}</div><div><strong>{holding.name}</strong><small>{holding.symbol}</small></div></div><span className="muted">{holding.sector}</span><span className={holding.price === "Unavailable" ? "muted" : ""}>{holding.price}</span><span className={holding.tone}>{holding.return}</span><div className="allocation"><span>{holding.weight}</span><i><em style={{ width: holding.weight }} /></i></div><button className="row-menu">•••</button></div>)}
+          {holdings.map((holding) => <div className="holding-row" key={holding.symbol}><div className="holding-name"><div className="ticker-icon">{holding.symbol.slice(0, 2)}</div><div><strong>{holding.name}</strong><small>{holding.symbol}</small></div></div><span className="muted">{holding.sector}</span><span className={holding.price === "Unavailable" ? "muted" : ""}>{holding.price}</span><span className={holding.tone}>{holding.return}</span><div className="allocation"><span>{holding.weight}</span><i><em style={{ width: holding.weight }} /></i></div><button className="row-menu" title={`Remove ${holding.name}`} aria-label={`Remove ${holding.name}`} onClick={() => removeHolding(holding.symbol)}>×</button></div>)}
         </section>
         {showAdd && <div className="modal-backdrop" onClick={() => { setShowAdd(false); setStockSearchOpen(false); }}><section className="add-modal" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><div className="kicker">PORTFOLIO ACTION</div><h2>Add holding</h2></div><button className="icon-button" onClick={() => setShowAdd(false)}>×</button></div><p className="modal-copy">Search live market instruments by typing a few letters. Select a result to fill the details automatically.</p><StockSearchField label="Symbol" value={newHolding.symbol} placeholder="Search symbol, e.g. AAPL" onChange={(value) => selectStock(value, "symbol")} onFocus={() => { setStockSearchField("symbol"); setStockSearchQuery(newHolding.symbol); setStockSearchOpen(true); }} open={stockSearchOpen && stockSearchField === "symbol"} suggestions={stockSuggestions} searching={stockSearching} onSelect={chooseStock} onCustom={chooseCustomStock} /><StockSearchField label="Company name" value={newHolding.name} placeholder="Search company name" onChange={(value) => selectStock(value, "name")} onFocus={() => { setStockSearchField("name"); setStockSearchQuery(newHolding.name); setStockSearchOpen(true); }} open={stockSearchOpen && stockSearchField === "name"} suggestions={stockSuggestions} searching={stockSearching} onSelect={chooseStock} onCustom={chooseCustomStock} /><div className="form-row"><label>Quantity<input type="number" min="0.01" step="0.01" value={newHolding.quantity} onChange={(event) => setNewHolding({ ...newHolding, quantity: event.target.value })} /></label><label>Average buy price<input type="number" min="0.01" step="0.01" value={newHolding.avg_buy_price} onChange={(event) => setNewHolding({ ...newHolding, avg_buy_price: event.target.value })} /></label></div><label>Sector<select value={newHolding.sector} onChange={(event) => setNewHolding({ ...newHolding, sector: event.target.value })}><option>Technology</option><option>Financials</option><option>Energy</option><option>Healthcare</option><option>Industrials</option><option>Consumer</option><option>Unclassified</option></select></label><div className="modal-actions"><button className="secondary" onClick={() => setShowAdd(false)}>Cancel</button><button className="primary" onClick={addHolding}>Add to portfolio</button></div></section></div>}
+        {showAuth && <div className="modal-backdrop" onClick={() => setShowAuth(false)}><section className="add-modal auth-modal" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><div className="kicker">ALPHASAGE ACCOUNT</div><h2>{authMode === "login" ? "Welcome back" : "Create your account"}</h2></div><button className="icon-button" onClick={() => setShowAuth(false)}>×</button></div><p className="modal-copy">{authMode === "login" ? "Sign in to sync your portfolio and watchlists across devices." : "Create a secure workspace for your investment research."}</p>{authMode === "register" && <label>Display name<input value={authForm.display_name} onChange={(event) => setAuthForm({ ...authForm, display_name: event.target.value })} placeholder="Your name" /></label>}<label>Email<input type="email" value={authForm.email} onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })} placeholder="you@example.com" /></label><label>Password<input type="password" value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} placeholder="At least 8 characters" /></label>{authError && <p className="auth-error">{authError}</p>}<div className="modal-actions"><button className="secondary" onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}>{authMode === "login" ? "Create account" : "Sign in instead"}</button><button className="primary" onClick={submitAuth}>{authMode === "login" ? "Sign in" : "Create account"}</button></div></section></div>}
         </> : <WorkspacePage active={active} />}
       </section>
       {stockDetails && <StockPreview details={stockDetails} loading={stockDetailsLoading} />}
     </main>
   );
+}
+
+function AuthGate({ mode, form, error, notice, otpSent, otp, resetPassword, onOtpChange, onResetPasswordChange, onModeChange, onChange, onSubmit, onForgot, onOtpSubmit }: { mode: "login" | "register"; form: { email: string; password: string; display_name: string }; error: string; notice: string; otpSent: boolean; otp: string; resetPassword: string; onOtpChange: (value: string) => void; onResetPasswordChange: (value: string) => void; onModeChange: (mode: "login" | "register") => void; onChange: (form: { email: string; password: string; display_name: string }) => void; onSubmit: () => void; onForgot: (email: string) => void; onOtpSubmit: () => void }) {
+  return <main className="auth-gate"><div className="auth-gate-glow" /><section className="auth-gate-card"><div className="brand auth-brand"><div className="brand-mark"><Sparkles size={18} /></div><div><strong>AlphaSage</strong><span>INVESTMENT INTELLIGENCE</span></div></div><div className="kicker">PRIVATE RESEARCH WORKSPACE</div><h1>{otpSent ? "Reset your password" : mode === "login" ? "Welcome back" : "Create your account"}</h1><p className="auth-gate-copy">{otpSent ? "Enter the 6-digit code sent to your email, then choose a new password." : mode === "login" ? "Sign in to access your portfolio, market research, and investment intelligence." : "Create a secure workspace to manage your portfolio and research across devices."}</p>{otpSent ? <><label>One-time code<input inputMode="numeric" maxLength={6} value={otp} onChange={(event) => onOtpChange(event.target.value)} placeholder="000000" /></label><label>New password<input type="password" minLength={8} value={resetPassword} onChange={(event) => onResetPasswordChange(event.target.value)} placeholder="At least 8 characters" /></label><button className="primary auth-submit" onClick={onOtpSubmit}>Update password</button></> : <>{mode === "register" && <label>Display name<input value={form.display_name} onChange={(event) => onChange({ ...form, display_name: event.target.value })} placeholder="Your name" /></label>}<label>Email<input type="email" value={form.email} onChange={(event) => onChange({ ...form, email: event.target.value })} placeholder="you@example.com" /></label><label>Password<input type="password" value={form.password} onChange={(event) => onChange({ ...form, password: event.target.value })} placeholder="At least 8 characters" /></label><button className="primary auth-submit" onClick={onSubmit}>{mode === "login" ? "Sign in to AlphaSage" : "Create secure account"}</button>{mode === "login" && <button className="forgot-link" onClick={() => onForgot(form.email)}>Forgot password?</button>}<button className="auth-switch" onClick={() => onModeChange(mode === "login" ? "register" : "login")}>{mode === "login" ? "New to AlphaSage? Create an account" : "Already have an account? Sign in"}</button></>}{error && <p className="auth-error">{error}</p>}{notice && <p className="auth-notice">{notice}</p>}<small className="auth-footnote">Your workspace is protected with secure session-based authentication.</small></section></main>;
 }
 
 function Metric({ label, value, detail, tone = "" }: { label: string; value: string; detail: string; tone?: string }) {

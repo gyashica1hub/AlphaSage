@@ -21,7 +21,7 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _ensure_demo_portfolio() -> str:
+def _ensure_demo_portfolio(user_id: str = DEMO_USER_ID) -> str:
     initialize_database()
     now = _now()
 
@@ -30,12 +30,12 @@ def _ensure_demo_portfolio() -> str:
             """INSERT OR IGNORE INTO users
                (id, email, display_name, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?)""",
-            (DEMO_USER_ID, DEMO_EMAIL, "Demo User", now, now),
+            (user_id, f"{user_id}@alphasage.local", "Demo User" if user_id == DEMO_USER_ID else "AlphaSage User", now, now),
         )
 
         portfolio = connection.execute(
             "SELECT id FROM portfolios WHERE user_id = ? LIMIT 1",
-            (DEMO_USER_ID,),
+            (user_id,),
         ).fetchone()
 
         if portfolio:
@@ -46,7 +46,7 @@ def _ensure_demo_portfolio() -> str:
                 """INSERT INTO portfolios
                    (id, user_id, name, created_at, updated_at)
                    VALUES (?, ?, ?, ?, ?)""",
-                (portfolio_id, DEMO_USER_ID, DEMO_PORTFOLIO_NAME, now, now),
+                (portfolio_id, user_id, DEMO_PORTFOLIO_NAME, now, now),
             )
 
         position_count = connection.execute(
@@ -54,7 +54,7 @@ def _ensure_demo_portfolio() -> str:
             (portfolio_id,),
         ).fetchone()["count"]
 
-        if position_count == 0 and SEED_FILE.exists():
+        if position_count == 0 and SEED_FILE.exists() and user_id == DEMO_USER_ID:
             seed = json.loads(SEED_FILE.read_text(encoding="utf-8"))
             for holding in seed.get("holdings", []):
                 connection.execute(
@@ -102,11 +102,11 @@ def _holdings(portfolio_id: str) -> list[dict]:
     ]
 
 
-def load_portfolio_raw() -> dict:
+def load_portfolio_raw(user_id: str = DEMO_USER_ID) -> dict:
     """Return the legacy dashboard shape, backed by SQLite."""
-    portfolio_id = _ensure_demo_portfolio()
+    portfolio_id = _ensure_demo_portfolio(user_id)
     return {
-        "user": "Demo User",
+        "user": "Demo User" if user_id == DEMO_USER_ID else "AlphaSage User",
         "broker": "SQLite demo portfolio",
         "portfolio_id": portfolio_id,
         "holdings": _holdings(portfolio_id),
@@ -125,8 +125,9 @@ def add_stock(
     avg_buy_price: float,
     buy_date: str,
     sector: str = "Other",
+    user_id: str = DEMO_USER_ID,
 ) -> bool:
-    portfolio_id = _ensure_demo_portfolio()
+    portfolio_id = _ensure_demo_portfolio(user_id)
     symbol = symbol.upper().strip()
     if not symbol.endswith(".NS") and not symbol.endswith(".BO"):
         symbol = symbol + ".NS"
@@ -175,8 +176,8 @@ def add_stock(
     return True
 
 
-def remove_stock(symbol: str) -> bool:
-    portfolio_id = _ensure_demo_portfolio()
+def remove_stock(symbol: str, user_id: str = DEMO_USER_ID) -> bool:
+    portfolio_id = _ensure_demo_portfolio(user_id)
     with get_connection() as connection:
         connection.execute(
             "DELETE FROM portfolio_positions WHERE portfolio_id = ? AND symbol = ?",

@@ -11,6 +11,7 @@ Run karne ke liye: streamlit run app.py
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from src.logging_config import configure_logging
 from datetime import datetime, date
 
 from src.fetch_prices import (
@@ -26,6 +27,8 @@ from src.kite_integration import is_kite_configured, fetch_real_holdings
 from src.backtest import evaluate_and_backtest
 from src.explainability import explain_prediction, SHAP_AVAILABLE
 from src.portfolio_analytics import diversification_score, performers, risk_score
+
+configure_logging()
 
 # ---------------- Page Config ----------------
 st.set_page_config(page_title="AlphaSage", layout="wide", page_icon=None)

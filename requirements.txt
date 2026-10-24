@@ -4,6 +4,9 @@ uvicorn[standard]
 pytest
 ruff
 sqlalchemy
+alembic
+argon2-cffi
+itsdangerous
 yfinance
 pandas
 numpy

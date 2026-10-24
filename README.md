@@ -20,6 +20,15 @@ The platform brings market data, portfolio analytics, sentiment analysis, machin
 
 AlphaSage is designed with a modular architecture so that the initial research dashboard can evolve into a secure, multi-user investment intelligence product.
 
+## Repository status
+
+This repository contains the active AlphaSage prototype and its Next.js/FastAPI web foundation. A separate `stocksense-ai` directory is not present in the current workspace. The prototype should be preserved locally as a reference before major domain changes:
+
+    git checkout -b prototype-reference
+    git checkout master
+
+The repository does not commit credentials, local databases, provider responses, or fabricated market/news data. When a provider is unavailable, the product reports the data as unavailable rather than inventing values.
+
 ## Core capabilities
 
 ### Portfolio intelligence
@@ -173,6 +182,11 @@ Copy .env.example to .env and add only the integrations required for local devel
 
     NEWS_API_KEY=
 
+    FINNHUB_API_KEY=
+    INDIAN_API_KEY=
+    INDIAN_API_BASE_URL=https://stock.indianapi.in
+    LOG_LEVEL=INFO
+
     KITE_API_KEY=
     KITE_API_SECRET=
     KITE_ACCESS_TOKEN=
@@ -214,6 +228,8 @@ The API health endpoint is available at http://127.0.0.1:8000/health and the por
     python -m compileall -q app.py src tests
     python -m pytest -q
     ruff check .
+    mypy api src
+    cd frontend; npm run typecheck; npm run lint
 
 The continuous-integration workflow validates Python syntax and builds the Docker image. Additional automated tests and security checks should be added as the platform grows.
 

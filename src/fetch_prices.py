@@ -10,9 +10,40 @@ Function names jaanbujh kar Kite Connect jaisa rakhe hain, taaki
 production mein migrate karna easy ho.
 """
 
+import os
+import logging
+import requests
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
+logger = logging.getLogger(__name__)
+
+
+def _indianapi_price(symbol: str) -> float | None:
+    token = os.getenv("INDIAN_API_KEY")
+    if not token:
+        return None
+    clean_symbol = symbol.upper().replace(".NS", "").replace(".BO", "")
+    base_url = os.getenv("INDIAN_API_BASE_URL", "https://dev.indianapi.in").rstrip("/")
+    try:
+        response = requests.get(
+            f"{base_url}/get_stock_data",
+            params={"stock_name": clean_symbol},
+            headers={"X-API-Key": token},
+            timeout=6,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        data = payload.get(clean_symbol, payload) if isinstance(payload, dict) else {}
+        if not isinstance(data, dict):
+            return None
+        value = data.get("ltp") or data.get("last_price") or data.get("close") or data.get("current_price")
+        return round(float(value), 2) if value is not None else None
+    except (requests.RequestException, ValueError, TypeError):
+        return None
 
 
 def get_live_price(symbol: str) -> float:
@@ -20,6 +51,9 @@ def get_live_price(symbol: str) -> float:
     Current/last traded price nikalta hai.
     Kite Connect mein iska equivalent: kite.ltp(symbol)
     """
+    indian_price = _indianapi_price(symbol)
+    if indian_price is not None:
+        return indian_price
     try:
         ticker = yf.Ticker(symbol)
         data = ticker.history(period="1d")
@@ -27,7 +61,7 @@ def get_live_price(symbol: str) -> float:
             return None
         return round(float(data["Close"].iloc[-1]), 2)
     except Exception as e:
-        print(f"[fetch_prices] Error fetching {symbol}: {e}")
+        logger.warning("price_fetch_failed", extra={"symbol": symbol, "error": str(e)})
         return None
 
 
@@ -42,7 +76,7 @@ def get_historical_data(symbol: str, period: str = "6mo", interval: str = "1d") 
         df.reset_index(inplace=True)
         return df
     except Exception as e:
-        print(f"[fetch_prices] Error fetching history for {symbol}: {e}")
+        logger.warning("history_fetch_failed", extra={"symbol": symbol, "error": str(e)})
         return pd.DataFrame()
 
 
