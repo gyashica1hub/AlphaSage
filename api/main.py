@@ -2,12 +2,15 @@
 
 import csv
 import os
+import secrets
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlencode
 
 import requests
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import yfinance as yf
@@ -107,6 +110,15 @@ class EmailVerificationRequest(BaseModel):
     otp: str = Field(pattern=r"^\d{6}$")
 
 
+GOOGLE_AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+
+
+def _google_configured() -> bool:
+    return bool(os.getenv("GOOGLE_CLIENT_ID") and os.getenv("GOOGLE_CLIENT_SECRET"))
+
+
 @app.post("/api/auth/register", status_code=201)
 def register(payload: RegisterRequest, response: Response) -> dict:
     if find_user_by_email(payload.email):
@@ -129,6 +141,65 @@ def login(payload: LoginRequest, response: Response) -> dict:
         raise HTTPException(status_code=403, detail="Please verify your email before signing in")
     response.set_cookie("alphasage_session", create_session_token(user.id), httponly=True, samesite="lax", secure=False, max_age=604800)
     return {"id": user.id, "email": user.email, "display_name": user.display_name}
+
+
+@app.get("/api/auth/google/start")
+def google_start(response: Response) -> RedirectResponse:
+    if not _google_configured():
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured")
+    state = secrets.token_urlsafe(32)
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback")
+    query = urlencode({
+        "client_id": os.environ["GOOGLE_CLIENT_ID"],
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "access_type": "online",
+        "prompt": "select_account",
+    })
+    redirect = RedirectResponse(f"{GOOGLE_AUTHORIZATION_URL}?{query}")
+    redirect.set_cookie("alphasage_google_state", state, httponly=True, samesite="lax", secure=False, max_age=600)
+    return redirect
+
+
+@app.get("/api/auth/google/callback")
+def google_callback(code: str | None = None, state: str | None = None, error: str | None = None, alphasage_google_state: str | None = Cookie(default=None)) -> RedirectResponse:
+    frontend_url = os.getenv("APP_BASE_URL", "http://localhost:3001")
+    if error or not code or not state or not secrets.compare_digest(state, alphasage_google_state or ""):
+        return RedirectResponse(f"{frontend_url}/?auth_error=google_sign_in_failed")
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback")
+    try:
+        token_response = requests.post(
+            GOOGLE_TOKEN_URL,
+            data={"code": code, "client_id": os.environ["GOOGLE_CLIENT_ID"], "client_secret": os.environ["GOOGLE_CLIENT_SECRET"], "redirect_uri": redirect_uri, "grant_type": "authorization_code"},
+            timeout=10,
+        )
+        token_response.raise_for_status()
+        access_token = token_response.json().get("access_token")
+        if not access_token:
+            raise ValueError("Google did not return an access token")
+        profile_response = requests.get(GOOGLE_USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+        profile_response.raise_for_status()
+        profile = profile_response.json()
+        email = str(profile.get("email", "")).lower().strip()
+        if not email or not profile.get("email_verified"):
+            raise ValueError("Google email is not verified")
+    except (requests.RequestException, ValueError, KeyError):
+        logging.getLogger(__name__).exception("google_sign_in_failed")
+        return RedirectResponse(f"{frontend_url}/?auth_error=google_sign_in_failed")
+    user = find_user_by_email(email)
+    if not user:
+        user = create_user(email, secrets.token_urlsafe(32), profile.get("name"))
+    with get_session() as session:
+        stored_user = session.get(User, user.id)
+        stored_user.email_verified = True
+        stored_user.display_name = stored_user.display_name or profile.get("name")
+        session.commit()
+    redirect = RedirectResponse(frontend_url)
+    redirect.set_cookie("alphasage_session", create_session_token(user.id), httponly=True, samesite="lax", secure=False, max_age=604800)
+    redirect.delete_cookie("alphasage_google_state")
+    return redirect
 
 
 @app.post("/api/auth/logout")
