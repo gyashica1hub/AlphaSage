@@ -78,6 +78,8 @@ export default function Home() {
   const [authError, setAuthError] = useState("");
   const [authNotice, setAuthNotice] = useState("");
   const [otpSent, setOtpSent] = useState(false);
+  const [emailVerificationSent, setEmailVerificationSent] = useState(false);
+  const [verificationOtp, setVerificationOtp] = useState("");
   const [resetOtp, setResetOtp] = useState("");
   const [resetPassword, setResetPassword] = useState("");
   const [authChecked, setAuthChecked] = useState(false);
@@ -199,7 +201,23 @@ export default function Home() {
     const endpoint = authMode === "login" ? "/auth/login" : "/auth/register";
     fetch(`${apiUrl.replace(/\/portfolio$/, "")}${endpoint}`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(authForm) })
       .then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.detail || "Authentication failed"); return body; })
-      .then((user) => { setAuthUser(user); setShowAuth(false); setAuthForm({ email: "", password: "", display_name: "" }); })
+      .then((user) => {
+        if (authMode === "register") {
+          setEmailVerificationSent(true);
+          setAuthNotice("We sent a verification code to your email.");
+        } else {
+          setAuthUser(user);
+          setShowAuth(false);
+          setAuthForm({ email: "", password: "", display_name: "" });
+        }
+      })
+      .catch((error) => setAuthError(error.message));
+  };
+  const verifyEmail = () => {
+    setAuthError("");
+    fetch(`${apiUrl.replace(/\/portfolio$/, "")}/auth/verify-email`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: authForm.email, otp: verificationOtp }) })
+      .then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.detail || "Verification failed"); return body; })
+      .then((user) => { setAuthUser(user); setEmailVerificationSent(false); setVerificationOtp(""); setAuthForm({ email: "", password: "", display_name: "" }); })
       .catch((error) => setAuthError(error.message));
   };
   const requestPasswordReset = (email: string) => {
@@ -224,7 +242,7 @@ export default function Home() {
   };
 
   if (!authChecked || !authUser) {
-    return <AuthGate mode={authMode} form={authForm} error={authError} notice={authNotice} otpSent={otpSent} otp={resetOtp} resetPassword={resetPassword} onOtpChange={setResetOtp} onResetPasswordChange={setResetPassword} onModeChange={(mode) => { setAuthMode(mode); setAuthError(""); setAuthNotice(""); setOtpSent(false); }} onChange={setAuthForm} onSubmit={submitAuth} onForgot={requestPasswordReset} onOtpSubmit={submitOtpReset} />;
+    return <AuthGate mode={authMode} form={authForm} error={authError} notice={authNotice} otpSent={otpSent} emailVerificationSent={emailVerificationSent} otp={resetOtp} verificationOtp={verificationOtp} resetPassword={resetPassword} onOtpChange={setResetOtp} onVerificationOtpChange={setVerificationOtp} onResetPasswordChange={setResetPassword} onModeChange={(mode) => { setAuthMode(mode); setAuthError(""); setAuthNotice(""); setOtpSent(false); setEmailVerificationSent(false); }} onChange={setAuthForm} onSubmit={submitAuth} onForgot={requestPasswordReset} onOtpSubmit={submitOtpReset} onVerifyEmail={verifyEmail} />;
   }
 
   return (
@@ -311,8 +329,8 @@ export default function Home() {
   );
 }
 
-function AuthGate({ mode, form, error, notice, otpSent, otp, resetPassword, onOtpChange, onResetPasswordChange, onModeChange, onChange, onSubmit, onForgot, onOtpSubmit }: { mode: "login" | "register"; form: { email: string; password: string; display_name: string }; error: string; notice: string; otpSent: boolean; otp: string; resetPassword: string; onOtpChange: (value: string) => void; onResetPasswordChange: (value: string) => void; onModeChange: (mode: "login" | "register") => void; onChange: (form: { email: string; password: string; display_name: string }) => void; onSubmit: () => void; onForgot: (email: string) => void; onOtpSubmit: () => void }) {
-  return <main className="auth-gate"><div className="auth-gate-glow" /><section className="auth-gate-card"><div className="brand auth-brand"><div className="brand-mark"><Sparkles size={18} /></div><div><strong>AlphaSage</strong><span>INVESTMENT INTELLIGENCE</span></div></div><div className="kicker">PRIVATE RESEARCH WORKSPACE</div><h1>{otpSent ? "Reset your password" : mode === "login" ? "Welcome back" : "Create your account"}</h1><p className="auth-gate-copy">{otpSent ? "Enter the 6-digit code sent to your email, then choose a new password." : mode === "login" ? "Sign in to access your portfolio, market research, and investment intelligence." : "Create a secure workspace to manage your portfolio and research across devices."}</p>{otpSent ? <><label>One-time code<input inputMode="numeric" maxLength={6} value={otp} onChange={(event) => onOtpChange(event.target.value)} placeholder="000000" /></label><label>New password<input type="password" minLength={8} value={resetPassword} onChange={(event) => onResetPasswordChange(event.target.value)} placeholder="At least 8 characters" /></label><button className="primary auth-submit" onClick={onOtpSubmit}>Update password</button></> : <>{mode === "register" && <label>Display name<input value={form.display_name} onChange={(event) => onChange({ ...form, display_name: event.target.value })} placeholder="Your name" /></label>}<label>Email<input type="email" value={form.email} onChange={(event) => onChange({ ...form, email: event.target.value })} placeholder="you@example.com" /></label><label>Password<input type="password" value={form.password} onChange={(event) => onChange({ ...form, password: event.target.value })} placeholder="At least 8 characters" /></label><button className="primary auth-submit" onClick={onSubmit}>{mode === "login" ? "Sign in to AlphaSage" : "Create secure account"}</button>{mode === "login" && <button className="forgot-link" onClick={() => onForgot(form.email)}>Forgot password?</button>}<button className="auth-switch" onClick={() => onModeChange(mode === "login" ? "register" : "login")}>{mode === "login" ? "New to AlphaSage? Create an account" : "Already have an account? Sign in"}</button></>}{error && <p className="auth-error">{error}</p>}{notice && <p className="auth-notice">{notice}</p>}<small className="auth-footnote">Your workspace is protected with secure session-based authentication.</small></section></main>;
+function AuthGate({ mode, form, error, notice, otpSent, emailVerificationSent, otp, verificationOtp, resetPassword, onOtpChange, onVerificationOtpChange, onResetPasswordChange, onModeChange, onChange, onSubmit, onForgot, onOtpSubmit, onVerifyEmail }: { mode: "login" | "register"; form: { email: string; password: string; display_name: string }; error: string; notice: string; otpSent: boolean; emailVerificationSent: boolean; otp: string; verificationOtp: string; resetPassword: string; onOtpChange: (value: string) => void; onVerificationOtpChange: (value: string) => void; onResetPasswordChange: (value: string) => void; onModeChange: (mode: "login" | "register") => void; onChange: (form: { email: string; password: string; display_name: string }) => void; onSubmit: () => void; onForgot: (email: string) => void; onOtpSubmit: () => void; onVerifyEmail: () => void }) {
+  return <main className="auth-gate"><div className="auth-gate-glow" /><section className="auth-gate-card"><div className="brand auth-brand"><div className="brand-mark"><Sparkles size={18} /></div><div><strong>AlphaSage</strong><span>INVESTMENT INTELLIGENCE</span></div></div><div className="kicker">PRIVATE RESEARCH WORKSPACE</div><h1>{emailVerificationSent ? "Verify your email" : otpSent ? "Reset your password" : mode === "login" ? "Welcome back" : "Create your account"}</h1><p className="auth-gate-copy">{emailVerificationSent ? "Enter the 6-digit code sent to your email before continuing." : otpSent ? "Enter the 6-digit code sent to your email, then choose a new password." : mode === "login" ? "Sign in to access your portfolio, market research, and investment intelligence." : "Create a secure workspace to manage your portfolio and research across devices."}</p>{emailVerificationSent ? <><label>Verification code<input inputMode="numeric" maxLength={6} value={verificationOtp} onChange={(event) => onVerificationOtpChange(event.target.value)} placeholder="000000" /></label><button className="primary auth-submit" onClick={onVerifyEmail}>Verify email</button></> : otpSent ? <><label>One-time code<input inputMode="numeric" maxLength={6} value={otp} onChange={(event) => onOtpChange(event.target.value)} placeholder="000000" /></label><label>New password<input type="password" minLength={8} value={resetPassword} onChange={(event) => onResetPasswordChange(event.target.value)} placeholder="At least 8 characters" /></label><button className="primary auth-submit" onClick={onOtpSubmit}>Update password</button></> : <>{mode === "register" && <label>Display name<input value={form.display_name} onChange={(event) => onChange({ ...form, display_name: event.target.value })} placeholder="Your name" /></label>}<label>Email<input type="email" value={form.email} onChange={(event) => onChange({ ...form, email: event.target.value })} placeholder="you@example.com" /></label><label>Password<input type="password" value={form.password} onChange={(event) => onChange({ ...form, password: event.target.value })} placeholder="At least 8 characters" /></label><button className="primary auth-submit" onClick={onSubmit}>{mode === "login" ? "Sign in to AlphaSage" : "Create secure account"}</button>{mode === "login" && <button className="forgot-link" onClick={() => onForgot(form.email)}>Forgot password?</button>}<button className="auth-switch" onClick={() => onModeChange(mode === "login" ? "register" : "login")}>{mode === "login" ? "New to AlphaSage? Create an account" : "Already have an account? Sign in"}</button></>}{error && <p className="auth-error">{error}</p>}{notice && <p className="auth-notice">{notice}</p>}<small className="auth-footnote">Your workspace is protected with secure session-based authentication.</small></section></main>;
 }
 
 function Metric({ label, value, detail, tone = "" }: { label: string; value: string; detail: string; tone?: string }) {

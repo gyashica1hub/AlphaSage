@@ -18,8 +18,8 @@ from src.logging_config import configure_logging
 from src.db.models import Alert, Note, Transaction, User, Watchlist, WatchlistItem
 from src.db.sqlite import initialize_database
 from src.db.session import get_session
-from src.auth import create_password_reset_otp, create_session_token, create_user, find_user_by_email, hash_password, read_session_token, verify_password, verify_password_reset_otp
-from src.email_service import send_password_reset_otp
+from src.auth import create_email_verification_otp, create_password_reset_otp, create_session_token, create_user, find_user_by_email, hash_password, read_session_token, verify_email_verification_otp, verify_password, verify_password_reset_otp
+from src.email_service import send_email_verification_otp, send_password_reset_otp
 import logging
 from src.portfolio_analytics import diversification_score, performers, risk_score
 from src.portfolio_manager import add_stock, load_portfolio_raw, remove_stock
@@ -102,13 +102,22 @@ class PasswordResetConfirm(BaseModel):
     password: str = Field(min_length=8, max_length=200)
 
 
+class EmailVerificationRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=200)
+    otp: str = Field(pattern=r"^\d{6}$")
+
+
 @app.post("/api/auth/register", status_code=201)
 def register(payload: RegisterRequest, response: Response) -> dict:
     if find_user_by_email(payload.email):
         raise HTTPException(status_code=409, detail="Email is already registered")
     user = create_user(payload.email, payload.password, payload.display_name)
-    response.set_cookie("alphasage_session", create_session_token(user.id), httponly=True, samesite="lax", secure=False, max_age=604800)
-    return {"id": user.id, "email": user.email, "display_name": user.display_name}
+    otp = create_email_verification_otp(user.id)
+    try:
+        send_email_verification_otp(user.email, otp)
+    except Exception:
+        logging.getLogger(__name__).exception("email_verification_send_failed")
+    return {"id": user.id, "email": user.email, "display_name": user.display_name, "email_verified": False}
 
 
 @app.post("/api/auth/login")
@@ -116,6 +125,8 @@ def login(payload: LoginRequest, response: Response) -> dict:
     user = find_user_by_email(payload.email)
     if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not user.email_verified:
+        raise HTTPException(status_code=403, detail="Please verify your email before signing in")
     response.set_cookie("alphasage_session", create_session_token(user.id), httponly=True, samesite="lax", secure=False, max_age=604800)
     return {"id": user.id, "email": user.email, "display_name": user.display_name}
 
@@ -136,6 +147,17 @@ def current_user(alphasage_session: str | None = Cookie(default=None)) -> dict:
         if not user:
             raise HTTPException(status_code=401, detail="Session user not found")
         return {"id": user.id, "email": user.email, "display_name": user.display_name}
+
+
+@app.post("/api/auth/verify-email")
+def verify_email(payload: EmailVerificationRequest, response: Response) -> dict:
+    user_id = verify_email_verification_otp(payload.email, payload.otp)
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Verification code is invalid or expired")
+    with get_session() as session:
+        user = session.get(User, user_id)
+        response.set_cookie("alphasage_session", create_session_token(user.id), httponly=True, samesite="lax", secure=False, max_age=604800)
+        return {"id": user.id, "email": user.email, "display_name": user.display_name, "email_verified": True}
 
 
 @app.post("/api/auth/forgot-password")

@@ -27,6 +27,10 @@ def initialize_database() -> None:
     schema_path = Path(__file__).with_name("schema.sql")
     with get_connection() as connection:
         connection.executescript(schema_path.read_text(encoding="utf-8"))
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
+        if "email_verified" not in columns:
+            connection.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0")
+            connection.execute("UPDATE users SET email_verified = 1")
 
 
 def connection() -> Iterator[sqlite3.Connection]:

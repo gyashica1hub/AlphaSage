@@ -30,8 +30,16 @@ def send_password_reset_email(recipient: str, reset_url: str) -> None:
 
 
 def send_password_reset_otp(recipient: str, otp: str) -> None:
+    send_otp_email(recipient, otp, "Your AlphaSage password reset code", "Your AlphaSage password reset OTP is")
+
+
+def send_email_verification_otp(recipient: str, otp: str) -> None:
+    send_otp_email(recipient, otp, "Verify your AlphaSage email", "Your AlphaSage email verification code is")
+
+
+def send_otp_email(recipient: str, otp: str, subject: str, message_prefix: str) -> None:
     if os.getenv("EMAIL_PROVIDER", "gmail").lower() == "resend":
-        send_password_reset_otp_resend(recipient, otp)
+        send_otp_email_resend(recipient, otp, subject, message_prefix)
         return
     username = os.getenv("MAIL_USERNAME")
     password = os.getenv("MAIL_PASSWORD")
@@ -39,10 +47,10 @@ def send_password_reset_otp(recipient: str, otp: str) -> None:
     if not username or not password or not sender:
         raise RuntimeError("Mail settings are not configured")
     message = EmailMessage()
-    message["Subject"] = "Your AlphaSage password reset code"
+    message["Subject"] = subject
     message["From"] = sender
     message["To"] = recipient
-    message.set_content(f"Your AlphaSage password reset OTP is: {otp}\n\nThis code expires in 10 minutes.")
+    message.set_content(f"{message_prefix}: {otp}\n\nThis code expires in 10 minutes.")
     with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as smtp:
         smtp.starttls()
         smtp.login(username, password)
@@ -50,6 +58,10 @@ def send_password_reset_otp(recipient: str, otp: str) -> None:
 
 
 def send_password_reset_otp_resend(recipient: str, otp: str) -> None:
+    send_otp_email_resend(recipient, otp, "Your AlphaSage password reset code", "Your AlphaSage password reset OTP is")
+
+
+def send_otp_email_resend(recipient: str, otp: str, subject: str, message_prefix: str) -> None:
     api_key = os.getenv("RESEND_API_KEY")
     sender = os.getenv("MAIL_FROM", "onboarding@resend.dev")
     if not api_key:
@@ -60,8 +72,8 @@ def send_password_reset_otp_resend(recipient: str, otp: str) -> None:
         json={
             "from": sender,
             "to": [recipient],
-            "subject": "Your AlphaSage password reset code",
-            "text": f"Your AlphaSage password reset OTP is: {otp}\n\nThis code expires in 10 minutes.",
+            "subject": subject,
+            "text": f"{message_prefix}: {otp}\n\nThis code expires in 10 minutes.",
         },
         timeout=15,
     )
