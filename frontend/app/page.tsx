@@ -515,6 +515,11 @@ function StockPreview({ details, loading }: { details: StockDetails | null; load
 }
 
 function ReadableStockDashboard({ details, loading, expanded, onExpand, onClose }: { details: StockDetails; loading: boolean; expanded: boolean; onExpand: () => void; onClose: () => void }) {
+  useEffect(() => {
+    const tone = details.price != null && details.purchase_price != null && details.price >= details.purchase_price ? "profit" : "loss";
+    document.documentElement.dataset.purchaseTone = tone;
+    return () => { delete document.documentElement.dataset.purchaseTone; };
+  }, [details.price, details.purchase_price]);
   const history = details.history || [];
   const values = history.map((point) => point.close);
   const chartMin = values.length ? Math.min(...values, ...(details.purchase_price ? [details.purchase_price] : [])) : details.purchase_price || 0;
