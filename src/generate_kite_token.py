@@ -53,7 +53,7 @@ def main():
             open(ENV_PATH, "a").close()
         set_key(ENV_PATH, "KITE_ACCESS_TOKEN", access_token)
 
-        print(f"\nSuccess! Access token generate ho gaya aur .env mein save ho gaya.")
+        print("\nSuccess! Access token generate ho gaya aur .env mein save ho gaya.")
         print("Ab 'streamlit run app.py' chalao - real holdings dikhengi.")
         print("(Yaad rakho: ye token sirf aaj ke liye valid hai, kal fir se ye script chalani hogi)")
 

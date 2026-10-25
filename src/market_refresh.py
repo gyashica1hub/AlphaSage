@@ -2,7 +2,6 @@
 
 import logging
 import sys
-import time
 from threading import Event
 
 from src.market_cache import MarketCache

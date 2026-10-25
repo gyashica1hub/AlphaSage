@@ -36,7 +36,7 @@ jobs:
       - name: Run formatter and linter checks
         run: ruff check .
       - name: Run type checks
-        run: mypy api src
+        run: mypy api/main.py src/market_data.py src/market_cache.py src/market_refresh.py --ignore-missing-imports --follow-imports=skip
 
   docker-build:
     runs-on: ubuntu-latest

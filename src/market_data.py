@@ -42,7 +42,7 @@ class QuoteProvider(Protocol):
 
 def _number(value: object) -> float | None:
     try:
-        return float(value) if value is not None else None
+        return float(str(value)) if value is not None else None
     except (TypeError, ValueError):
         return None
 

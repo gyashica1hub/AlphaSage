@@ -64,7 +64,7 @@ def explain_prediction(df: pd.DataFrame, sentiment_score: float = 0.0, lookback:
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(X.tail(1))
 
-        importance = {col: float(val) for col, val in zip(X.columns, shap_values[0])}
+        importance = {col: float(val) for col, val in zip(X.columns, shap_values[0], strict=False)}
         importance = dict(sorted(importance.items(), key=lambda x: abs(x[1]), reverse=True))
         return importance
     except Exception as e:

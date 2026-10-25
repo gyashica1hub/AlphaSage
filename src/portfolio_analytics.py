@@ -1,7 +1,6 @@
 """Deterministic portfolio insights for the AlphaSage dashboard."""
 
 from collections import defaultdict
-from math import sqrt
 
 
 def _weights(portfolio: list[dict]) -> list[tuple[dict, float]]:
