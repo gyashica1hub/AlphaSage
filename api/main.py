@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 import yfinance as yf
 from dotenv import load_dotenv
 
-from src.fetch_prices import get_portfolio_with_live_prices
+from src.fetch_prices import get_historical_data, get_portfolio_with_live_prices
 from src.logging_config import configure_logging
 from src.db.models import Alert, AlertDelivery, Note, PortfolioPosition, Transaction, User, Watchlist, WatchlistItem
 from src.db.sqlite import initialize_database
@@ -25,6 +25,7 @@ from src.auth import create_email_verification_otp, create_password_reset_otp, c
 from src.email_service import send_email_verification_otp, send_password_reset_otp
 import logging
 from src.portfolio_analytics import diversification_score, performers, risk_score
+from src.risk_metrics import historical_risk_metrics
 from src.portfolio_manager import add_stock, load_portfolio_raw, remove_stock
 from src.market_data import MarketDataService
 from src.market_cache import MarketCache
@@ -317,6 +318,27 @@ def require_user(alphasage_session: str | None = Cookie(default=None)) -> User:
 @app.get("/api/portfolio")
 def get_portfolio(user: User = Depends(require_user)) -> dict:
     return _portfolio_response(user.id)
+
+
+@app.get("/api/portfolio/risk")
+def get_portfolio_risk(user: User = Depends(require_user)) -> dict:
+    """Return historical risk metrics for the authenticated user's holdings."""
+    raw = load_portfolio_raw(user.id)
+    metrics = []
+    for holding in raw["holdings"]:
+        history = get_historical_data(holding["symbol"], period="6mo")
+        prices = history["Close"].tolist() if not history.empty and "Close" in history else []
+        metrics.append({"symbol": holding["symbol"], **historical_risk_metrics(prices)})
+    available = [item for item in metrics if item["status"] == "ok"]
+    return {
+        "portfolio_id": raw["portfolio_id"],
+        "metrics": metrics,
+        "data_quality": {
+            "available_count": len(available),
+            "unavailable_count": len(metrics) - len(available),
+            "checked_at": datetime.now(UTC).isoformat(),
+        },
+    }
 
 
 @app.post("/api/portfolio/transactions", status_code=201)
