@@ -339,6 +339,18 @@ def list_transactions(user: User = Depends(require_user)) -> list[dict]:
         ]
 
 
+@app.delete("/api/portfolio/transactions/{transaction_id}")
+def delete_transaction(transaction_id: str, user: User = Depends(require_user)) -> dict:
+    portfolio_id = load_portfolio_raw(user.id)["portfolio_id"]
+    with get_session() as session:
+        row = session.query(Transaction).filter(Transaction.id == transaction_id, Transaction.portfolio_id == portfolio_id).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        session.delete(row)
+        session.commit()
+    return {"status": "deleted", "id": transaction_id}
+
+
 @app.get("/api/watchlists")
 def get_watchlists(user: User = Depends(require_user)) -> list[dict]:
     with get_session() as session:

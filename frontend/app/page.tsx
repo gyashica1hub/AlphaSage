@@ -38,6 +38,7 @@ async function searchLocalTop100(query: string): Promise<StockOption[]> {
 
 type Holding = typeof fallbackHoldings[number] & { quantity?: number; avg_buy_price?: number; buy_date?: string };
 type PortfolioResponse = { holdings: Holding[]; summary: Record<string, any>; data_quality?: { status: string; available_count: number; unavailable_count: number; checked_at: string } };
+type Transaction = { id: string; symbol: string; side: "BUY" | "SELL"; quantity: number; price: number; executed_at: string };
 type StockOption = { symbol: string; name: string; sector: string; exchange?: string };
 type StockDetails = StockOption & { price?: number | null; change?: number; change_pct?: number; high?: number; low?: number; previous_close?: number; volume?: number; status: string };
 type AuthUser = { id: string; email: string; display_name?: string | null };
@@ -68,6 +69,8 @@ const navigation = [
 export default function Home() {
   const [active, setActive] = useState("Portfolio");
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactionForm, setTransactionForm] = useState({ symbol: "", side: "BUY" as "BUY" | "SELL", quantity: "1", price: "100", executed_at: new Date().toISOString().slice(0, 10) });
   const [holdings, setHoldings] = useState<Holding[]>(fallbackHoldings);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -127,6 +130,14 @@ export default function Home() {
       })
       .catch(() => setPortfolio(null))
       .finally(() => setLoading(false));
+  }, [apiUrl, authUser]);
+
+  useEffect(() => {
+    if (!authUser) return;
+    fetch(`${apiUrl}/transactions`, { credentials: "include" })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Unable to load transactions")))
+      .then((data) => setTransactions(data))
+      .catch(() => setTransactions([]));
   }, [apiUrl, authUser]);
 
   useEffect(() => { if (portfolio?.holdings) setHoldings(portfolio.holdings); }, [portfolio]);
@@ -205,6 +216,19 @@ export default function Home() {
       .then((response) => response.ok ? response.json() : response.json().then((body) => Promise.reject(new Error(body.detail || "Unable to remove holding"))))
       .then((data) => { setPortfolio(data); setHoldings(data.holdings); })
       .catch((error) => window.alert(error.message || "Unable to remove holding"));
+  };
+  const addTransaction = () => {
+    const payload = { symbol: transactionForm.symbol.trim().toUpperCase(), side: transactionForm.side, quantity: Number(transactionForm.quantity), price: Number(transactionForm.price), executed_at: new Date(`${transactionForm.executed_at}T00:00:00`).toISOString() };
+    if (!payload.symbol || payload.quantity <= 0 || payload.price < 0) return;
+    fetch(`${apiUrl}/transactions`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+      .then((response) => response.ok ? response.json() : response.json().then((body) => Promise.reject(new Error(apiErrorMessage(body, "Unable to add transaction")))))
+      .then(() => fetch(`${apiUrl}/transactions`, { credentials: "include" }))
+      .then((response) => response.json())
+      .then((data) => setTransactions(data));
+  };
+  const removeTransaction = (id: string) => {
+    fetch(`${apiUrl}/transactions/${id}`, { method: "DELETE", credentials: "include" })
+      .then((response) => response.ok ? setTransactions((current) => current.filter((item) => item.id !== id)) : Promise.reject(new Error("Unable to remove transaction")));
   };
   const submitAuth = () => {
     setAuthError("");
@@ -335,6 +359,7 @@ export default function Home() {
           <div className="table-head"><span>Holding</span><span>Sector</span><span>Market price</span><span>Return</span><span>Allocation</span><span /></div>
           {holdings.map((holding, index) => <div className="holding-row" key={`${holding.symbol}-${holding.name}-${index}`}><div className="holding-name"><div className="ticker-icon">{holding.symbol.slice(0, 2)}</div><div><strong>{holding.name}</strong><small>{holding.symbol}</small></div></div><span className="muted">{holding.sector}</span><span className={holding.price === "Unavailable" ? "muted" : ""}>{holding.price}</span><span className={holding.tone}>{holding.return}</span><div className="allocation"><span>{holding.weight}</span><i><em style={{ width: holding.weight }} /></i></div><button className="row-menu" title={`Remove ${holding.name}`} aria-label={`Remove ${holding.name}`} onClick={() => removeHolding(holding.symbol)}>×</button></div>)}
         </section>
+        <section className="activity-section"><div className="section-heading activity-heading"><div><div className="kicker">PORTFOLIO ACTIVITY</div><h2>Transaction history</h2></div></div><div className="transaction-form"><input aria-label="Transaction symbol" placeholder="Symbol e.g. RELIANCE.NS" value={transactionForm.symbol} onChange={(event) => setTransactionForm({ ...transactionForm, symbol: event.target.value })} /><select aria-label="Transaction side" value={transactionForm.side} onChange={(event) => setTransactionForm({ ...transactionForm, side: event.target.value as "BUY" | "SELL" })}><option value="BUY">Buy</option><option value="SELL">Sell</option></select><input aria-label="Transaction quantity" type="number" min="0.01" step="0.01" placeholder="Quantity" value={transactionForm.quantity} onChange={(event) => setTransactionForm({ ...transactionForm, quantity: event.target.value })} /><input aria-label="Transaction price" type="number" min="0" step="0.01" placeholder="Price" value={transactionForm.price} onChange={(event) => setTransactionForm({ ...transactionForm, price: event.target.value })} /><input aria-label="Transaction date" type="date" value={transactionForm.executed_at} onChange={(event) => setTransactionForm({ ...transactionForm, executed_at: event.target.value })} /><button className="primary compact" onClick={addTransaction}>Add transaction</button></div>{transactions.length === 0 ? <div className="activity-empty">No transactions recorded yet. Add your first buy or sell activity above.</div> : <div className="transactions-list">{transactions.map((transaction) => <div className="transaction-row" key={transaction.id}><div><strong>{transaction.symbol}</strong><small>{new Date(transaction.executed_at).toLocaleDateString()}</small></div><span className={transaction.side === "BUY" ? "transaction-buy" : "transaction-sell"}>{transaction.side}</span><span>{transaction.quantity} shares</span><span>₹{transaction.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span><button className="row-menu" aria-label={`Remove ${transaction.symbol} transaction`} onClick={() => removeTransaction(transaction.id)}>×</button></div>)}</div>}</section>
         {showAdd && <div className="modal-backdrop" onClick={() => { setShowAdd(false); setStockSearchOpen(false); }}><section className="add-modal" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><div className="kicker">PORTFOLIO ACTION</div><h2>Add holding</h2></div><button className="icon-button" onClick={() => setShowAdd(false)}>×</button></div><p className="modal-copy">Search live market instruments by typing a few letters. Select a result to fill the details automatically.</p><StockSearchField label="Symbol" value={newHolding.symbol} placeholder="Search symbol, e.g. AAPL" onChange={(value) => selectStock(value, "symbol")} onFocus={() => { setStockSearchField("symbol"); setStockSearchQuery(newHolding.symbol); setStockSearchOpen(true); }} open={stockSearchOpen && stockSearchField === "symbol"} suggestions={stockSuggestions} searching={stockSearching} onSelect={chooseStock} onCustom={chooseCustomStock} /><StockSearchField label="Company name" value={newHolding.name} placeholder="Search company name" onChange={(value) => selectStock(value, "name")} onFocus={() => { setStockSearchField("name"); setStockSearchQuery(newHolding.name); setStockSearchOpen(true); }} open={stockSearchOpen && stockSearchField === "name"} suggestions={stockSuggestions} searching={stockSearching} onSelect={chooseStock} onCustom={chooseCustomStock} /><div className="form-row"><label>Quantity<input type="number" min="0.01" step="0.01" value={newHolding.quantity} onChange={(event) => setNewHolding({ ...newHolding, quantity: event.target.value })} /></label><label>Average buy price<input type="number" min="0.01" step="0.01" value={newHolding.avg_buy_price} onChange={(event) => setNewHolding({ ...newHolding, avg_buy_price: event.target.value })} /></label></div><label>Sector<select value={newHolding.sector} onChange={(event) => setNewHolding({ ...newHolding, sector: event.target.value })}><option>Technology</option><option>Financials</option><option>Energy</option><option>Healthcare</option><option>Industrials</option><option>Consumer</option><option>Unclassified</option></select></label><div className="modal-actions"><button className="secondary" onClick={() => setShowAdd(false)}>Cancel</button><button className="primary" onClick={addHolding}>Add to portfolio</button></div></section></div>}
         {showAuth && <div className="modal-backdrop" onClick={() => setShowAuth(false)}><section className="add-modal auth-modal" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><div className="kicker">ALPHASAGE ACCOUNT</div><h2>{authMode === "login" ? "Welcome back" : "Create your account"}</h2></div><button className="icon-button" onClick={() => setShowAuth(false)}>×</button></div><p className="modal-copy">{authMode === "login" ? "Sign in to sync your portfolio and watchlists across devices." : "Create a secure workspace for your investment research."}</p>{authMode === "register" && <label>Display name<input value={authForm.display_name} onChange={(event) => setAuthForm({ ...authForm, display_name: event.target.value })} placeholder="Your name" /></label>}<label>Email<input type="email" value={authForm.email} onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })} placeholder="you@example.com" /></label><label>Password<input type="password" value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} placeholder="At least 8 characters" /></label>{authError && <p className="auth-error">{authError}</p>}<div className="modal-actions"><button className="secondary" onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}>{authMode === "login" ? "Create account" : "Sign in instead"}</button><button className="primary" onClick={submitAuth}>{authMode === "login" ? "Sign in" : "Create account"}</button></div></section></div>}
         </> : <WorkspacePage active={active} />}
