@@ -622,7 +622,17 @@ def stock_dashboard(symbol: str) -> dict:
         stock_history = yf.Ticker(ticker).history(period="6mo", interval="1d")
         benchmark_history = yf.Ticker(benchmark_symbol).history(period="6mo", interval="1d")
         if not stock_history.empty:
-            history_points = [{"date": index.strftime("%Y-%m-%d"), "close": round(float(row["Close"]), 2)} for index, row in stock_history.iterrows() if row["Close"] == row["Close"]]
+            history_points = [
+                {
+                    "date": index.strftime("%Y-%m-%d"),
+                    "open": round(float(row["Open"]), 2),
+                    "high": round(float(row["High"]), 2),
+                    "low": round(float(row["Low"]), 2),
+                    "close": round(float(row["Close"]), 2),
+                }
+                for index, row in stock_history.iterrows()
+                if row["Close"] == row["Close"]
+            ]
         if not benchmark_history.empty:
             benchmark_points = [{"date": index.strftime("%Y-%m-%d"), "close": round(float(row["Close"]), 2)} for index, row in benchmark_history.iterrows() if row["Close"] == row["Close"]]
         info = yf.Ticker(ticker).info

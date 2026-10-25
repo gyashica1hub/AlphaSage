@@ -43,7 +43,7 @@ type Watchlist = { id: string; name: string };
 type WatchlistItem = { id: string; symbol: string; created_at: string };
 type MarketInstrument = { name: string; symbol: string; region: string; price?: number | null; change?: number; change_pct?: number | null; status: string };
 type StockOption = { symbol: string; name: string; sector: string; exchange?: string };
-type StockHistoryPoint = { date: string; close: number };
+type StockHistoryPoint = { date: string; open?: number; high?: number; low?: number; close: number };
 type StockDetails = StockOption & { price?: number | null; change?: number; change_pct?: number; high?: number; low?: number; previous_close?: number; volume?: number; status: string; purchase_price?: number | null; history?: StockHistoryPoint[]; benchmark?: StockHistoryPoint[]; benchmark_symbol?: string; stock_return_pct?: number | null; benchmark_return_pct?: number | null; fundamentals?: { market_cap?: number | null; pe_ratio?: number | null; dividend_yield?: number | null; week52_high?: number | null; week52_low?: number | null } };
 type AuthUser = { id: string; email: string; display_name?: string | null };
 
@@ -489,7 +489,7 @@ export default function Home() {
         {showAuth && <div className="modal-backdrop" onClick={() => setShowAuth(false)}><section className="add-modal auth-modal" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><div className="kicker">ALPHASAGE ACCOUNT</div><h2>{authMode === "login" ? "Welcome back" : "Create your account"}</h2></div><button className="icon-button" onClick={() => setShowAuth(false)}>×</button></div><p className="modal-copy">{authMode === "login" ? "Sign in to sync your portfolio and watchlists across devices." : "Create a secure workspace for your investment research."}</p>{authMode === "register" && <label>Display name<input value={authForm.display_name} onChange={(event) => setAuthForm({ ...authForm, display_name: event.target.value })} placeholder="Your name" /></label>}<label>Email<input type="email" value={authForm.email} onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })} placeholder="you@example.com" /></label><label>Password<input type="password" value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} placeholder="At least 8 characters" /></label>{authError && <p className="auth-error">{authError}</p>}<div className="modal-actions"><button className="secondary" onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}>{authMode === "login" ? "Create account" : "Sign in instead"}</button><button className="primary" onClick={submitAuth}>{authMode === "login" ? "Sign in" : "Create account"}</button></div></section></div>}
         </> : active === "Watchlists" ? <WatchlistsPage watchlists={watchlists} items={watchlistItems} quotes={watchlistQuotes} symbol={watchlistSymbol} suggestions={stockSuggestions} searching={stockSearching} searchOpen={stockSearchOpen && stockSearchField === "symbol"} refreshing={watchlistRefreshing} onSymbolChange={(value) => { setWatchlistSymbol(value); setStockSearchQuery(value); setStockSearchField("symbol"); setStockSearchOpen(true); }} onSearchFocus={() => { setStockSearchField("symbol"); setStockSearchQuery(watchlistSymbol); setStockSearchOpen(true); }} onSelect={chooseWatchlistStock} onCreate={createWatchlist} onAdd={addWatchlistSymbol} onRemove={removeWatchlistSymbol} onViewStock={viewWatchlistStock} onRefresh={refreshWatchlistQuotes} /> : active === "Global markets" ? <MarketOverviewPage instruments={marketInstruments} loading={marketsLoading} onRefresh={() => setMarketRefreshKey((value) => value + 1)} /> : <WorkspacePage active={active} />}
       </section>
-      {stockDetails && <ReadableStockDashboard details={stockDetails} loading={stockDetailsLoading} expanded={stockDetailsExpanded} onExpand={() => setStockDetailsExpanded((value) => !value)} onClose={() => { setStockDetails(null); setStockDetailsPinned(false); setStockDetailsExpanded(false); }} />}
+      {stockDetails && <ReadableStockDashboardV2 details={stockDetails} loading={stockDetailsLoading} expanded={stockDetailsExpanded} onExpand={() => setStockDetailsExpanded((value) => !value)} onClose={() => { setStockDetails(null); setStockDetailsPinned(false); setStockDetailsExpanded(false); }} />}
     </main>
   );
 }
@@ -529,6 +529,46 @@ function ReadableStockDashboard({ details, loading, expanded, onExpand, onClose 
   const points = history.map((point, index) => `${(index / Math.max(history.length - 1, 1)) * 320},${yFor(point.close)}`).join(" ");
   const purchaseY = details.purchase_price == null ? null : yFor(details.purchase_price);
   return <aside className={`stock-preview${expanded ? " expanded" : ""}`}><div className="preview-heading"><div><span className="kicker">SELECTED INSTRUMENT</span><strong>{details.name}</strong><small>{details.symbol} · {details.exchange}</small></div><div className="preview-heading-actions"><span className="preview-status">{loading ? "Loading" : details.status}</span><button className="preview-expand" onClick={onExpand}>{expanded ? "Collapse" : "Expand"}</button><button className="preview-close" onClick={onClose} aria-label="Close stock details">×</button></div></div><div className="preview-price">{details.price == null ? "Price unavailable" : `₹${details.price.toLocaleString("en-IN")}`} {details.change_pct != null && <small className={details.change_pct < 0 ? "negative" : "positive"}>{details.change_pct >= 0 ? "+" : ""}{details.change_pct.toFixed(2)}%</small>}</div>{history.length > 1 && <div className="stock-chart readable-chart"><svg viewBox="0 0 320 80" role="img" aria-label={`${details.name} six month price chart`}><line x1="0" x2="320" y1="8" y2="8" className="chart-grid-line" /><line x1="0" x2="320" y1="40" y2="40" className="chart-grid-line" /><line x1="0" x2="320" y1="72" y2="72" className="chart-grid-line" />{purchaseY != null && <line x1="0" x2="320" y1={purchaseY} y2={purchaseY} className="purchase-price-line" />}<polyline points={points} fill="none" stroke="var(--green)" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg><div><span>6M price trend {details.purchase_price != null && <em className="purchase-legend">Purchase ₹{details.purchase_price.toLocaleString("en-IN")}</em>}</span><span>{details.stock_return_pct == null ? "—" : `${details.stock_return_pct >= 0 ? "+" : ""}${details.stock_return_pct.toFixed(2)}%`}</span></div></div>}<div className="preview-meta"><span>Sector<strong>{details.sector}</strong></span><span>Day high<strong>{details.high == null ? "—" : details.high}</strong></span><span>Day low<strong>{details.low == null ? "—" : details.low}</strong></span><span>Previous close<strong>{details.previous_close == null ? "—" : details.previous_close}</strong></span></div><div className="preview-fundamentals"><span><small>Market cap</small><strong>{details.fundamentals?.market_cap ? `₹${(details.fundamentals.market_cap / 10000000).toFixed(1)} Cr` : "—"}</strong></span><span><small>P/E ratio</small><strong>{details.fundamentals?.pe_ratio?.toFixed(2) || "—"}</strong></span><span><small>52W range</small><strong>{details.fundamentals?.week52_low && details.fundamentals?.week52_high ? `${details.fundamentals.week52_low} – ${details.fundamentals.week52_high}` : "—"}</strong></span><span><small>vs {details.benchmark_symbol || "benchmark"}</small><strong>{details.benchmark_return_pct == null ? "—" : `${details.benchmark_return_pct >= 0 ? "+" : ""}${details.benchmark_return_pct.toFixed(2)}%`}</strong></span></div></aside>;
+}
+
+function StockCandleChart({ details }: { details: StockDetails }) {
+  const history = (details.history || []).slice(-90);
+  const prices = history.flatMap((point) => [point.high ?? point.close, point.low ?? point.close]);
+  if (details.purchase_price != null) prices.push(details.purchase_price);
+  const min = prices.length ? Math.min(...prices) : 0;
+  const max = prices.length ? Math.max(...prices) : 1;
+  const range = Math.max(max - min, 1);
+  const yFor = (value: number) => 72 - ((value - min) / range) * 64;
+  const xFor = (index: number) => 12 + (index / Math.max(history.length - 1, 1)) * 296;
+  const bodyWidth = Math.max(2, Math.min(7, 260 / Math.max(history.length, 1)));
+  const purchaseY = details.purchase_price == null ? null : yFor(details.purchase_price);
+
+  return <div className="stock-chart readable-chart"><svg viewBox="0 0 320 80" role="img" aria-label={`${details.name} six month candlestick price chart`}>
+    <line x1="0" x2="320" y1="8" y2="8" className="chart-grid-line" />
+    <line x1="0" x2="320" y1="40" y2="40" className="chart-grid-line" />
+    <line x1="0" x2="320" y1="72" y2="72" className="chart-grid-line" />
+    {purchaseY != null && <line x1="0" x2="320" y1={purchaseY} y2={purchaseY} className="purchase-price-line" />}
+    {history.map((point) => {
+      const open = point.open ?? point.close;
+      const close = point.close;
+      const high = point.high ?? Math.max(open, close);
+      const low = point.low ?? Math.min(open, close);
+      const up = close >= open;
+      const x = xFor(history.indexOf(point));
+      const bodyY = Math.min(yFor(open), yFor(close));
+      const bodyHeight = Math.max(1.5, Math.abs(yFor(open) - yFor(close)));
+      return <g key={point.date}><line x1={x} x2={x} y1={yFor(high)} y2={yFor(low)} className={up ? "candle-wick-up" : "candle-wick-down"} /><rect x={x - bodyWidth / 2} y={bodyY} width={bodyWidth} height={bodyHeight} className={up ? "candle-up" : "candle-down"} /></g>;
+    })}
+  </svg><div><span>6M candlestick trend {details.purchase_price != null && <em className="purchase-legend">Purchase ₹{details.purchase_price.toLocaleString("en-IN")}</em>}</span><span>{details.stock_return_pct == null ? "—" : `${details.stock_return_pct >= 0 ? "+" : ""}${details.stock_return_pct.toFixed(2)}%`}</span></div></div>;
+}
+
+function ReadableStockDashboardV2({ details, loading, expanded, onExpand, onClose }: { details: StockDetails; loading: boolean; expanded: boolean; onExpand: () => void; onClose: () => void }) {
+  useEffect(() => {
+    const tone = details.price != null && details.purchase_price != null && details.price >= details.purchase_price ? "profit" : "loss";
+    document.documentElement.dataset.purchaseTone = tone;
+    return () => { delete document.documentElement.dataset.purchaseTone; };
+  }, [details.price, details.purchase_price]);
+  return <aside className={`stock-preview${expanded ? " expanded" : ""}`}><div className="preview-heading"><div><span className="kicker">SELECTED INSTRUMENT</span><strong>{details.name}</strong><small>{details.symbol} · {details.exchange}</small></div><div className="preview-heading-actions"><span className="preview-status">{loading ? "Loading" : details.status}</span><button className="preview-expand" onClick={onExpand}>{expanded ? "Collapse" : "Expand"}</button><button className="preview-close" onClick={onClose} aria-label="Close stock details">×</button></div></div><div className="preview-price">{details.price == null ? "Price unavailable" : `₹${details.price.toLocaleString("en-IN")}`} {details.change_pct != null && <small className={details.change_pct < 0 ? "negative" : "positive"}>{details.change_pct >= 0 ? "+" : ""}{details.change_pct.toFixed(2)}%</small>}</div>{(details.history || []).length > 1 && <StockCandleChart details={details} />}<div className="preview-meta"><span>Sector<strong>{details.sector}</strong></span><span>Day high<strong>{details.high == null ? "—" : details.high}</strong></span><span>Day low<strong>{details.low == null ? "—" : details.low}</strong></span><span>Previous close<strong>{details.previous_close == null ? "—" : details.previous_close}</strong></span></div><div className="preview-fundamentals"><span><small>Market cap</small><strong>{details.fundamentals?.market_cap ? `₹${(details.fundamentals.market_cap / 10000000).toFixed(1)} Cr` : "—"}</strong></span><span><small>P/E ratio</small><strong>{details.fundamentals?.pe_ratio?.toFixed(2) || "—"}</strong></span><span><small>52W range</small><strong>{details.fundamentals?.week52_low && details.fundamentals?.week52_high ? `${details.fundamentals.week52_low} – ${details.fundamentals.week52_high}` : "—"}</strong></span><span><small>vs {details.benchmark_symbol || "benchmark"}</small><strong>{details.benchmark_return_pct == null ? "—" : `${details.benchmark_return_pct >= 0 ? "+" : ""}${details.benchmark_return_pct.toFixed(2)}%`}</strong></span></div></aside>;
 }
 
 function StockDashboardPreview({ details, loading, expanded, onExpand, onClose }: { details: StockDetails; loading: boolean; expanded: boolean; onExpand: () => void; onClose: () => void }) {
