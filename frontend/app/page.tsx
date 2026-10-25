@@ -48,6 +48,7 @@ type StockDetails = StockOption & { price?: number | null; change?: number; chan
 type AuthUser = { id: string; email: string; display_name?: string | null };
 type AlertRule = { id: string; symbol: string; rule: string; threshold: number; cooldown_minutes: number; last_triggered_at?: string | null; active: boolean };
 type AlertDelivery = { id: string; symbol?: string; channel: string; status: string; message: string; error?: string | null; created_at: string };
+type RiskMetric = { symbol: string; status: string; observations?: number; volatility?: number; max_drawdown?: number; downside_deviation?: number };
 
 function apiErrorMessage(body: any, fallback: string): string {
   if (typeof body?.detail === "string") return body.detail;
@@ -123,6 +124,8 @@ export default function Home() {
   const [deliveries, setDeliveries] = useState<AlertDelivery[]>([]);
   const [deliveriesLoading, setDeliveriesLoading] = useState(false);
   const [browserNotifications, setBrowserNotifications] = useState(false);
+  const [riskMetrics, setRiskMetrics] = useState<RiskMetric[]>([]);
+  const [riskMetricsLoading, setRiskMetricsLoading] = useState(false);
 
   useEffect(() => {
     if (!stockDetails || stockDetailsPinned) return;
@@ -243,6 +246,17 @@ export default function Home() {
       .catch(() => setPortfolio(null))
       .finally(() => setLoading(false));
   }, [apiUrl, authUser]);
+
+  useEffect(() => {
+    if (!authUser || active !== "Portfolio") return;
+    const baseUrl = apiUrl.replace(/\/portfolio$/, "");
+    setRiskMetricsLoading(true);
+    fetch(`${baseUrl}/portfolio/risk`, { credentials: "include" })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Risk data unavailable")))
+      .then((data) => setRiskMetrics(data.metrics || []))
+      .catch(() => setRiskMetrics([]))
+      .finally(() => setRiskMetricsLoading(false));
+  }, [active, apiUrl, authUser]);
 
   useEffect(() => {
     if (!watchlistItems.length) { setWatchlistQuotes({}); return; }
@@ -544,6 +558,8 @@ export default function Home() {
           <Insight label="Diversification score" value={summary?.diversification_score == null ? "—" : `${summary.diversification_score}/100`} detail="Calculated from current exposure" />
           <Insight label="Risk score" value={summary?.risk_score == null ? "—" : `${summary.risk_score}/100`} detail="Lower concentration is better" />
         </section>
+
+        <section className="activity-section risk-metrics-section"><div className="section-heading activity-heading"><div><div className="kicker">HISTORICAL RISK</div><h2>Risk by holding</h2></div><span>{riskMetricsLoading ? "Loading…" : "6 month history"}</span></div>{riskMetrics.length === 0 ? <div className="activity-empty">Historical risk metrics will appear when price history is available.</div> : <div className="risk-metrics-grid">{riskMetrics.map((metric) => <article className="risk-metric-card" key={metric.symbol}><strong>{metric.symbol}</strong>{metric.status === "ok" ? <><span>Volatility <b>{((metric.volatility || 0) * 100).toFixed(1)}%</b></span><span>Max drawdown <b className="negative">-{((metric.max_drawdown || 0) * 100).toFixed(1)}%</b></span><span>Downside deviation <b>{((metric.downside_deviation || 0) * 100).toFixed(1)}%</b></span></> : <small>Price history unavailable</small>}</article>)}</div>}</section>
 
         <div className="section-heading"><div><div className="kicker">POSITIONS</div><h2>Holdings</h2></div><div className="section-actions"><button className="secondary compact" onClick={refreshPortfolio} disabled={refreshing}><LineChart size={15} /> {refreshing ? "Refreshing" : "Refresh prices"}</button><button className="secondary compact" onClick={() => setHoldings(fallbackHoldings)}>Try demo portfolio</button></div></div>
 
