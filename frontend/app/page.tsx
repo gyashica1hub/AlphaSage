@@ -112,6 +112,19 @@ export default function Home() {
   }, [stockDetails]);
 
   useEffect(() => {
+    if (!stockSearchOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest(".stock-search-field")) {
+        setStockSearchOpen(false);
+        setStockSearchField(null);
+      }
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
+  }, [stockSearchOpen]);
+
+  useEffect(() => {
     fetch(`${apiUrl.replace(/\/portfolio$/, "")}/auth/me`, { credentials: "include" })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("Not signed in")))
       .then((user) => setAuthUser(user))
