@@ -412,6 +412,20 @@ def add_watchlist_item(watchlist_id: str, payload: WatchlistItemCreate, user: Us
         return {"id": row.id, "symbol": row.symbol}
 
 
+@app.delete("/api/watchlists/{watchlist_id}/items/{symbol}")
+def remove_watchlist_item(watchlist_id: str, symbol: str, user: User = Depends(require_user)) -> dict:
+    with get_session() as session:
+        owned = session.query(Watchlist).filter(Watchlist.id == watchlist_id, Watchlist.user_id == user.id).first()
+        if owned is None:
+            raise HTTPException(status_code=404, detail="Watchlist not found")
+        row = session.query(WatchlistItem).filter(WatchlistItem.watchlist_id == watchlist_id, WatchlistItem.symbol == symbol.upper()).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Watchlist symbol not found")
+        session.delete(row)
+        session.commit()
+    return {"status": "deleted", "symbol": symbol.upper()}
+
+
 @app.post("/api/notes", status_code=201)
 def create_note(payload: NoteCreate, user: User = Depends(require_user)) -> dict:
     now = datetime.now(UTC)
