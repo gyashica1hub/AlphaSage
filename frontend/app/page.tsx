@@ -37,7 +37,7 @@ async function searchLocalTop100(query: string): Promise<StockOption[]> {
 }
 
 type Holding = typeof fallbackHoldings[number] & { quantity?: number; avg_buy_price?: number; buy_date?: string };
-type PortfolioResponse = { holdings: Holding[]; summary: Record<string, any> };
+type PortfolioResponse = { holdings: Holding[]; summary: Record<string, any>; data_quality?: { status: string; available_count: number; unavailable_count: number; checked_at: string } };
 type StockOption = { symbol: string; name: string; sector: string; exchange?: string };
 type StockDetails = StockOption & { price?: number | null; change?: number; change_pct?: number; high?: number; low?: number; previous_close?: number; volume?: number; status: string };
 type AuthUser = { id: string; email: string; display_name?: string | null };
@@ -302,6 +302,7 @@ export default function Home() {
         </div>
 
         <div className="disclaimer"><ShieldCheck size={16} /><span><strong>Research tool only.</strong> Market data may be delayed or incomplete. This is not financial advice.</span><button>Learn more</button></div>
+        {portfolio?.data_quality && <div className={`data-status ${portfolio.data_quality.status}`}><span className="data-status-dot" /><strong>{portfolio.data_quality.status === "available" ? "Market data available" : portfolio.data_quality.status === "partial" ? "Some market data unavailable" : "Market data unavailable"}</strong><span>{portfolio.data_quality.available_count} of {holdings.length} prices available</span><time>{new Date(portfolio.data_quality.checked_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></div>}
 
         <section className="insight-hero">
           <div className="insight-copy"><div className="eyebrow"><Sparkles size={14} /> ALPHASAGE INTELLIGENCE</div><h2>Your portfolio, interpreted.</h2><p>Get a clear view of exposure, performance, and the signals that matter before you make your next decision.</p><button className="hero-action">Open AI research <LineChart size={15} /></button></div>

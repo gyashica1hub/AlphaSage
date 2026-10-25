@@ -267,6 +267,9 @@ def _portfolio_response(user_id: str = "demo-user") -> dict:
     current_values = [item["current_value"] for item in enriched if item["current_value"] is not None]
     current = sum(current_values) if current_values else None
     pnl = current - invested if current is not None else None
+    unavailable_count = sum(item["price_status"] == "unavailable" for item in enriched)
+    available_count = len(enriched) - unavailable_count
+    data_status = "unavailable" if not available_count and enriched else "partial" if unavailable_count else "available"
     return {
         "portfolio_id": raw["portfolio_id"],
         "holdings": enriched,
@@ -280,6 +283,12 @@ def _portfolio_response(user_id: str = "demo-user") -> dict:
             "worst_performer": worst,
             "diversification_score": diversification_score(enriched),
             "risk_score": risk_score(enriched),
+        },
+        "data_quality": {
+            "status": data_status,
+            "available_count": available_count,
+            "unavailable_count": unavailable_count,
+            "checked_at": datetime.now(UTC).isoformat(),
         },
     }
 
