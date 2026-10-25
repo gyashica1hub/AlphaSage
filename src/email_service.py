@@ -37,6 +37,32 @@ def send_email_verification_otp(recipient: str, otp: str) -> None:
     send_otp_email(recipient, otp, "Verify your AlphaSage email", "Your AlphaSage email verification code is")
 
 
+def send_alert_email(recipient: str, symbol: str, body: str) -> None:
+    subject = f"AlphaSage alert: {symbol}"
+    if os.getenv("EMAIL_PROVIDER", "gmail").lower() == "resend":
+        api_key = os.getenv("RESEND_API_KEY")
+        sender = os.getenv("MAIL_FROM", "onboarding@resend.dev")
+        if not api_key:
+            raise RuntimeError("RESEND_API_KEY is not configured")
+        response = requests.post("https://api.resend.com/emails", headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json={"from": sender, "to": [recipient], "subject": subject, "text": body}, timeout=15)
+        response.raise_for_status()
+        return
+    username = os.getenv("MAIL_USERNAME")
+    password = os.getenv("MAIL_PASSWORD")
+    sender = os.getenv("MAIL_FROM", username or "")
+    if not username or not password or not sender:
+        raise RuntimeError("Mail settings are not configured")
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = sender
+    message["To"] = recipient
+    message.set_content(body)
+    with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as smtp:
+        smtp.starttls()
+        smtp.login(username, password)
+        smtp.send_message(message)
+
+
 def send_otp_email(recipient: str, otp: str, subject: str, message_prefix: str) -> None:
     if os.getenv("EMAIL_PROVIDER", "gmail").lower() == "resend":
         send_otp_email_resend(recipient, otp, subject, message_prefix)

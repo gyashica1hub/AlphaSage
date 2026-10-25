@@ -31,6 +31,11 @@ def initialize_database() -> None:
         if "email_verified" not in columns:
             connection.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0")
             connection.execute("UPDATE users SET email_verified = 1")
+        alert_columns = {row[1] for row in connection.execute("PRAGMA table_info(alerts)").fetchall()}
+        if "cooldown_minutes" not in alert_columns:
+            connection.execute("ALTER TABLE alerts ADD COLUMN cooldown_minutes INTEGER NOT NULL DEFAULT 60")
+        if "last_triggered_at" not in alert_columns:
+            connection.execute("ALTER TABLE alerts ADD COLUMN last_triggered_at TEXT")
 
 
 def connection() -> Iterator[sqlite3.Connection]:

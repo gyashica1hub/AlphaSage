@@ -77,8 +77,23 @@ CREATE TABLE IF NOT EXISTS alerts (
     rule TEXT NOT NULL,
     threshold REAL NOT NULL,
     active INTEGER NOT NULL DEFAULT 1,
+    cooldown_minutes INTEGER NOT NULL DEFAULT 60,
+    last_triggered_at TEXT,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS alert_deliveries (
+    id TEXT PRIMARY KEY,
+    alert_id TEXT NOT NULL REFERENCES alerts(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    channel TEXT NOT NULL,
+    status TEXT NOT NULL,
+    message TEXT NOT NULL,
+    error TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_alert_deliveries_alert_id ON alert_deliveries(alert_id, created_at);
 
 CREATE TABLE IF NOT EXISTS password_reset_otps (
     id TEXT PRIMARY KEY,

@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 
 from src.fetch_prices import get_portfolio_with_live_prices
 from src.logging_config import configure_logging
-from src.db.models import Alert, Note, PortfolioPosition, Transaction, User, Watchlist, WatchlistItem
+from src.db.models import Alert, AlertDelivery, Note, PortfolioPosition, Transaction, User, Watchlist, WatchlistItem
 from src.db.sqlite import initialize_database
 from src.db.session import get_session
 from src.auth import create_email_verification_otp, create_password_reset_otp, create_session_token, create_user, find_user_by_email, hash_password, read_session_token, verify_email_verification_otp, verify_password, verify_password_reset_otp
@@ -28,6 +28,7 @@ from src.portfolio_analytics import diversification_score, performers, risk_scor
 from src.portfolio_manager import add_stock, load_portfolio_raw, remove_stock
 from src.market_data import MarketDataService
 from src.market_cache import MarketCache
+from src.alert_service import evaluate_alerts
 
 load_dotenv()
 configure_logging()
@@ -83,8 +84,9 @@ class NoteCreate(BaseModel):
 
 class AlertCreate(BaseModel):
     symbol: str = Field(min_length=1, max_length=30)
-    rule: str = Field(min_length=1, max_length=50)
+    rule: str = Field(pattern="^(price_above|price_below|change_pct_above|change_pct_below)$")
     threshold: float
+    cooldown_minutes: int = Field(default=60, ge=1, le=10080)
 
 
 class RegisterRequest(BaseModel):
@@ -448,18 +450,32 @@ def get_notes(user: User = Depends(require_user)) -> list[dict]:
 
 @app.post("/api/alerts", status_code=201)
 def create_alert(payload: AlertCreate, user: User = Depends(require_user)) -> dict:
-    row = Alert(id=str(uuid.uuid4()), user_id=user.id, symbol=payload.symbol.upper(), rule=payload.rule, threshold=payload.threshold, active=True, created_at=datetime.now(UTC))
+    row = Alert(id=str(uuid.uuid4()), user_id=user.id, symbol=payload.symbol.upper(), rule=payload.rule, threshold=payload.threshold, active=True, cooldown_minutes=payload.cooldown_minutes, created_at=datetime.now(UTC))
     with get_session() as session:
         session.add(row)
         session.commit()
-    return {"id": row.id, "symbol": row.symbol, "rule": row.rule, "threshold": row.threshold, "active": row.active}
+    return {"id": row.id, "symbol": row.symbol, "rule": row.rule, "threshold": row.threshold, "cooldown_minutes": row.cooldown_minutes, "active": row.active}
 
 
 @app.get("/api/alerts")
 def get_alerts(user: User = Depends(require_user)) -> list[dict]:
     with get_session() as session:
         rows = session.query(Alert).filter(Alert.user_id == user.id).order_by(Alert.created_at.desc()).all()
-        return [{"id": row.id, "symbol": row.symbol, "rule": row.rule, "threshold": row.threshold, "active": row.active} for row in rows]
+        return [{"id": row.id, "symbol": row.symbol, "rule": row.rule, "threshold": row.threshold, "cooldown_minutes": row.cooldown_minutes, "last_triggered_at": row.last_triggered_at.isoformat() if row.last_triggered_at else None, "active": row.active} for row in rows]
+
+
+@app.post("/api/alerts/evaluate")
+def evaluate_user_alerts(user: User = Depends(require_user)) -> dict:
+    with get_session() as session:
+        results = evaluate_alerts(session, market_data)
+    return {"results": results}
+
+
+@app.get("/api/alerts/deliveries")
+def get_alert_deliveries(user: User = Depends(require_user)) -> list[dict]:
+    with get_session() as session:
+        rows = session.query(AlertDelivery).filter(AlertDelivery.user_id == user.id).order_by(AlertDelivery.created_at.desc()).limit(50).all()
+        return [{"id": row.id, "alert_id": row.alert_id, "channel": row.channel, "status": row.status, "message": row.message, "error": row.error, "created_at": row.created_at.isoformat()} for row in rows]
 
 
 def _finnhub_search(query: str) -> list[dict]:
