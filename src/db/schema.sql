@@ -119,3 +119,9 @@ CREATE TABLE IF NOT EXISTS market_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_market_history_symbol_date ON market_history(symbol, date);
+
+CREATE TABLE IF NOT EXISTS market_actions (
+    symbol TEXT PRIMARY KEY,
+    payload TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+);

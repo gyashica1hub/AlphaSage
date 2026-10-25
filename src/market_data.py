@@ -137,6 +137,7 @@ class MarketDataService:
         self.retry_attempts = retry_attempts
         self.persistent_cache = cache
         self._cache: dict[str, tuple[float, dict]] = {}
+        self.metrics = {"provider_calls": 0, "provider_failures": 0, "cache_hits": 0, "persistent_cache_hits": 0}
 
     def quote(self, symbol: str) -> dict:
         ticker = symbol.strip().upper()
@@ -144,16 +145,19 @@ class MarketDataService:
         cached = self._cache.get(ticker)
         if cached and now - cached[0] < self.ttl_seconds:
             result = {**cached[1], "cache": "hit"}
+            self.metrics["cache_hits"] += 1
             return result
         if self.persistent_cache:
             cached_payload = self.persistent_cache.get_quote(ticker, self.ttl_seconds)
             if cached_payload:
                 self._cache[ticker] = (now, cached_payload)
+                self.metrics["persistent_cache_hits"] += 1
                 return cached_payload
 
         for provider in self.providers:
             for attempt in range(self.retry_attempts):
                 try:
+                    self.metrics["provider_calls"] += 1
                     quote = provider.fetch(ticker)
                     if quote is None:
                         break
@@ -172,6 +176,7 @@ class MarketDataService:
                         self.persistent_cache.put_quote(ticker, result)
                     return result
                 except Exception as error:  # providers are external and may raise library-specific errors
+                    self.metrics["provider_failures"] += 1
                     logger.warning("market_provider_attempt_failed", extra={"provider": provider.name, "symbol": ticker, "attempt": attempt + 1, "error": str(error)})
                     if attempt + 1 < self.retry_attempts:
                         time.sleep(0.15 * (attempt + 1))
@@ -214,6 +219,33 @@ class MarketDataService:
                     time.sleep(0.15 * (attempt + 1))
         return []
 
+    def actions(self, symbol: str) -> list[dict]:
+        ticker = symbol.strip().upper()
+        if self.persistent_cache:
+            cached = self.persistent_cache.get_actions(ticker, 86400)
+            if cached is not None:
+                return cached
+        try:
+            frame = yf.Ticker(ticker).actions
+            actions = []
+            for index, row in frame.iterrows():
+                for action in ("Dividends", "Stock Splits"):
+                    value = _number(row.get(action))
+                    if value:
+                        actions.append({"date": index.strftime("%Y-%m-%d"), "type": action.lower().replace(" ", "_"), "value": value})
+            if self.persistent_cache:
+                self.persistent_cache.put_actions(ticker, actions)
+            return actions
+        except Exception as error:
+            logger.warning("market_actions_unavailable", extra={"symbol": ticker, "error": str(error)})
+            return []
+
+    @staticmethod
+    def history_quality(points: list[dict]) -> dict:
+        dates = [point["date"] for point in points]
+        invalid = sum(1 for point in points if point.get("close", 0) <= 0 or (point.get("high") is not None and point.get("low") is not None and point["high"] < point["low"]))
+        return {"points": len(points), "invalid_points": invalid, "duplicate_dates": len(dates) - len(set(dates)), "status": "good" if points and invalid == 0 and len(dates) == len(set(dates)) else "incomplete"}
+
     def refresh(self, symbol: str) -> dict:
         ticker = symbol.strip().upper()
         self._cache.pop(ticker, None)
@@ -221,3 +253,6 @@ class MarketDataService:
             self.persistent_cache.clear(ticker)
         quote = self.quote(ticker)
         return {**quote, "history": self.history(ticker)}
+
+    def status(self) -> dict:
+        return {**self.metrics, "providers": [provider.name for provider in self.providers], "quote_cache_ttl_seconds": self.ttl_seconds, "history_cache_ttl_seconds": 900}

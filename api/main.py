@@ -595,6 +595,11 @@ def refresh_stock(symbol: str) -> dict:
     return market_data.refresh(symbol)
 
 
+@app.get("/api/market-data/status")
+def market_data_status() -> dict:
+    return market_data.status()
+
+
 @app.get("/api/stocks/dashboard")
 def stock_dashboard(symbol: str) -> dict:
     ticker = symbol.strip().upper()
@@ -616,7 +621,8 @@ def stock_dashboard(symbol: str) -> dict:
         stock_return = round((history_points[-1]["close"] / history_points[0]["close"] - 1) * 100, 2)
     if len(benchmark_points) > 1:
         benchmark_return = round((benchmark_points[-1]["close"] / benchmark_points[0]["close"] - 1) * 100, 2)
-    return {**details, "history": history_points[-130:], "benchmark": benchmark_points[-130:], "benchmark_symbol": benchmark_symbol, "stock_return_pct": stock_return, "benchmark_return_pct": benchmark_return, "fundamentals": fundamentals}
+    history_points = history_points[-130:]
+    return {**details, "history": history_points, "benchmark": benchmark_points[-130:], "benchmark_symbol": benchmark_symbol, "stock_return_pct": stock_return, "benchmark_return_pct": benchmark_return, "history_quality": market_data.history_quality(history_points), "corporate_actions": market_data.actions(ticker), "fundamentals": fundamentals}
 
 
 @app.get("/api/market-overview")

@@ -34,6 +34,7 @@ class MarketCache:
         with get_connection() as connection:
             connection.execute("DELETE FROM market_quotes WHERE symbol = ?", (symbol,))
             connection.execute("DELETE FROM market_history WHERE symbol = ?", (symbol,))
+            connection.execute("DELETE FROM market_actions WHERE symbol = ?", (symbol,))
 
     def get_history(self, symbol: str, max_age_seconds: int) -> list[dict] | None:
         with get_connection() as connection:
@@ -54,3 +55,14 @@ class MarketCache:
                 "INSERT INTO market_history(symbol, date, open, high, low, close, volume, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 [(symbol, point["date"], point.get("open"), point.get("high"), point.get("low"), point["close"], point.get("volume"), fetched_at) for point in points],
             )
+
+    def get_actions(self, symbol: str, max_age_seconds: int) -> list[dict] | None:
+        with get_connection() as connection:
+            row = connection.execute("SELECT payload, fetched_at FROM market_actions WHERE symbol = ?", (symbol,)).fetchone()
+        if not row or (_now() - datetime.fromisoformat(row["fetched_at"])).total_seconds() > max_age_seconds:
+            return None
+        return json.loads(row["payload"])
+
+    def put_actions(self, symbol: str, actions: list[dict]) -> None:
+        with get_connection() as connection:
+            connection.execute("INSERT INTO market_actions(symbol, payload, fetched_at) VALUES (?, ?, ?) ON CONFLICT(symbol) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at", (symbol, json.dumps(actions), _now().isoformat()))
