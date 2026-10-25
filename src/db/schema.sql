@@ -99,3 +99,23 @@ CREATE TABLE IF NOT EXISTS email_verification_otps (
     used INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS market_quotes (
+    symbol TEXT PRIMARY KEY,
+    payload TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS market_history (
+    symbol TEXT NOT NULL,
+    date TEXT NOT NULL,
+    open REAL,
+    high REAL,
+    low REAL,
+    close REAL NOT NULL,
+    volume INTEGER,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (symbol, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_market_history_symbol_date ON market_history(symbol, date);

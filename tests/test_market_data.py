@@ -51,3 +51,18 @@ def test_market_data_reports_unavailable_without_fabricating_price():
     assert result["price"] is None
     assert result["data_status"] == "unavailable"
     assert result["status"] == "Price unavailable"
+
+
+def test_market_data_retries_provider_errors():
+    class FlakyProvider(FakeProvider):
+        def fetch(self, symbol):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("temporary provider failure")
+            return make_quote(symbol)
+
+    provider = FlakyProvider()
+    result = MarketDataService([provider], retry_attempts=2).quote("RETRY.NS")
+
+    assert result["price"] == 123.45
+    assert provider.calls == 2

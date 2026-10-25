@@ -12,6 +12,8 @@ from typing import Protocol
 import requests
 import yfinance as yf
 
+from src.market_cache import MarketCache
+
 logger = logging.getLogger(__name__)
 
 
@@ -129,10 +131,11 @@ class YahooFinanceProvider:
 
 
 class MarketDataService:
-    def __init__(self, providers: list[QuoteProvider] | None = None, ttl_seconds: int = 30, retry_attempts: int = 2) -> None:
+    def __init__(self, providers: list[QuoteProvider] | None = None, ttl_seconds: int = 30, retry_attempts: int = 2, cache: MarketCache | None = None) -> None:
         self.providers = providers or [IndianApiProvider(), FinnhubProvider(), YahooFinanceProvider()]
         self.ttl_seconds = ttl_seconds
         self.retry_attempts = retry_attempts
+        self.persistent_cache = cache
         self._cache: dict[str, tuple[float, dict]] = {}
 
     def quote(self, symbol: str) -> dict:
@@ -142,6 +145,11 @@ class MarketDataService:
         if cached and now - cached[0] < self.ttl_seconds:
             result = {**cached[1], "cache": "hit"}
             return result
+        if self.persistent_cache:
+            cached_payload = self.persistent_cache.get_quote(ticker, self.ttl_seconds)
+            if cached_payload:
+                self._cache[ticker] = (now, cached_payload)
+                return cached_payload
 
         for provider in self.providers:
             for attempt in range(self.retry_attempts):
@@ -149,6 +157,8 @@ class MarketDataService:
                     quote = provider.fetch(ticker)
                     if quote is None:
                         break
+                    if quote.price is None or quote.price <= 0 or (quote.high is not None and quote.low is not None and quote.high < quote.low):
+                        raise ValueError("provider returned invalid quote values")
                     result = {
                         "symbol": quote.symbol, "name": quote.name, "exchange": quote.exchange, "sector": quote.sector,
                         "price": quote.price, "change": quote.change, "change_pct": quote.change_pct, "high": quote.high,
@@ -158,6 +168,8 @@ class MarketDataService:
                         "cache": "miss",
                     }
                     self._cache[ticker] = (now, result)
+                    if self.persistent_cache:
+                        self.persistent_cache.put_quote(ticker, result)
                     return result
                 except Exception as error:  # providers are external and may raise library-specific errors
                     logger.warning("market_provider_attempt_failed", extra={"provider": provider.name, "symbol": ticker, "attempt": attempt + 1, "error": str(error)})
@@ -170,4 +182,42 @@ class MarketDataService:
             "fetched_at": datetime.now(UTC).isoformat(), "cache": "miss",
         }
         self._cache[ticker] = (now, result)
+        if self.persistent_cache:
+            self.persistent_cache.put_quote(ticker, result)
         return result
+
+    def history(self, symbol: str, period: str = "6mo", interval: str = "1d") -> list[dict]:
+        """Load historical OHLC data from the persistent cache or Yahoo Finance."""
+        ticker = symbol.strip().upper()
+        if self.persistent_cache:
+            cached = self.persistent_cache.get_history(ticker, 900)
+            if cached:
+                return cached
+        for attempt in range(self.retry_attempts):
+            try:
+                frame = yf.Ticker(ticker).history(period=period, interval=interval)
+                points = []
+                for index, row in frame.iterrows():
+                    close = _number(row.get("Close"))
+                    high = _number(row.get("High"))
+                    low = _number(row.get("Low"))
+                    if close is None or close <= 0 or (high is not None and low is not None and high < low):
+                        logger.warning("market_history_invalid_point", extra={"symbol": ticker, "date": str(index)})
+                        continue
+                    points.append({"date": index.strftime("%Y-%m-%d"), "open": _number(row.get("Open")), "high": high, "low": low, "close": round(close, 2), "volume": int(row["Volume"]) if _number(row.get("Volume")) is not None else None})
+                if self.persistent_cache:
+                    self.persistent_cache.put_history(ticker, points)
+                return points
+            except Exception as error:
+                logger.warning("market_history_attempt_failed", extra={"symbol": ticker, "attempt": attempt + 1, "error": str(error)})
+                if attempt + 1 < self.retry_attempts:
+                    time.sleep(0.15 * (attempt + 1))
+        return []
+
+    def refresh(self, symbol: str) -> dict:
+        ticker = symbol.strip().upper()
+        self._cache.pop(ticker, None)
+        if self.persistent_cache:
+            self.persistent_cache.clear(ticker)
+        quote = self.quote(ticker)
+        return {**quote, "history": self.history(ticker)}

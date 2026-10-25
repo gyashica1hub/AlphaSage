@@ -27,11 +27,12 @@ import logging
 from src.portfolio_analytics import diversification_score, performers, risk_score
 from src.portfolio_manager import add_stock, load_portfolio_raw, remove_stock
 from src.market_data import MarketDataService
+from src.market_cache import MarketCache
 
 load_dotenv()
 configure_logging()
 initialize_database()
-market_data = MarketDataService()
+market_data = MarketDataService(cache=MarketCache())
 
 app = FastAPI(title="AlphaSage API", version="0.1.0")
 NSE_UNIVERSE_FILE = Path(__file__).resolve().parents[1] / "data" / "nse_equity.csv"
@@ -589,6 +590,11 @@ def stock_details(symbol: str) -> dict:
     return market_data.quote(symbol)
 
 
+@app.post("/api/stocks/refresh")
+def refresh_stock(symbol: str) -> dict:
+    return market_data.refresh(symbol)
+
+
 @app.get("/api/stocks/dashboard")
 def stock_dashboard(symbol: str) -> dict:
     ticker = symbol.strip().upper()
@@ -598,22 +604,8 @@ def stock_dashboard(symbol: str) -> dict:
     benchmark_points: list[dict] = []
     fundamentals = {"market_cap": None, "pe_ratio": None, "dividend_yield": None, "week52_high": None, "week52_low": None}
     try:
-        stock_history = yf.Ticker(ticker).history(period="6mo", interval="1d")
-        benchmark_history = yf.Ticker(benchmark_symbol).history(period="6mo", interval="1d")
-        if not stock_history.empty:
-            history_points = [
-                {
-                    "date": index.strftime("%Y-%m-%d"),
-                    "open": round(float(row["Open"]), 2),
-                    "high": round(float(row["High"]), 2),
-                    "low": round(float(row["Low"]), 2),
-                    "close": round(float(row["Close"]), 2),
-                }
-                for index, row in stock_history.iterrows()
-                if row["Close"] == row["Close"]
-            ]
-        if not benchmark_history.empty:
-            benchmark_points = [{"date": index.strftime("%Y-%m-%d"), "close": round(float(row["Close"]), 2)} for index, row in benchmark_history.iterrows() if row["Close"] == row["Close"]]
+        history_points = market_data.history(ticker)
+        benchmark_points = market_data.history(benchmark_symbol)
         info = yf.Ticker(ticker).info
         fundamentals = {"market_cap": info.get("marketCap"), "pe_ratio": info.get("trailingPE"), "dividend_yield": info.get("dividendYield"), "week52_high": info.get("fiftyTwoWeekHigh"), "week52_low": info.get("fiftyTwoWeekLow")}
     except Exception:

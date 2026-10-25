@@ -337,7 +337,7 @@ export default function Home() {
   const refreshWatchlistQuotes = () => {
     setWatchlistRefreshing(true);
     const baseUrl = apiUrl.replace(/\/portfolio$/, "");
-    Promise.all(watchlistItems.map((item) => fetch(`${baseUrl}/stocks/details?symbol=${encodeURIComponent(item.symbol)}`).then((response) => response.ok ? response.json() : Promise.reject(new Error("Quote unavailable"))).then((quote) => ({ ...quote, symbol: item.symbol } as StockDetails)).catch(() => ({ symbol: item.symbol, name: item.symbol, sector: "Other", status: "Price unavailable" }))))
+    Promise.all(watchlistItems.map((item) => fetch(`${baseUrl}/stocks/refresh?symbol=${encodeURIComponent(item.symbol)}`, { method: "POST" }).then((response) => response.ok ? response.json() : Promise.reject(new Error("Quote unavailable"))).then((quote) => ({ ...quote, symbol: item.symbol } as StockDetails)).catch(() => ({ symbol: item.symbol, name: item.symbol, sector: "Other", status: "Price unavailable" }))))
       .then((quotes) => setWatchlistQuotes(Object.fromEntries(quotes.map((quote) => [quote.symbol, quote]))))
       .finally(() => setWatchlistRefreshing(false));
   };
