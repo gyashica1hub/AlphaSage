@@ -26,10 +26,12 @@ from src.email_service import send_email_verification_otp, send_password_reset_o
 import logging
 from src.portfolio_analytics import diversification_score, performers, risk_score
 from src.portfolio_manager import add_stock, load_portfolio_raw, remove_stock
+from src.market_data import MarketDataService
 
 load_dotenv()
 configure_logging()
 initialize_database()
+market_data = MarketDataService()
 
 app = FastAPI(title="AlphaSage API", version="0.1.0")
 NSE_UNIVERSE_FILE = Path(__file__).resolve().parents[1] / "data" / "nse_equity.csv"
@@ -584,30 +586,7 @@ def search_stocks(q: str) -> dict:
 
 @app.get("/api/stocks/details")
 def stock_details(symbol: str) -> dict:
-    ticker = symbol.strip().upper()
-    indian_data = _indianapi_stock_data(ticker)
-    if indian_data:
-        return indian_data
-    token = os.getenv("FINNHUB_API_KEY")
-    if token:
-        try:
-            quote = requests.get("https://finnhub.io/api/v1/quote", params={"symbol": ticker.replace(".NS", ""), "token": token}, timeout=5).json()
-            profile = requests.get("https://finnhub.io/api/v1/stock/profile2", params={"symbol": ticker.replace(".NS", ""), "token": token}, timeout=5).json()
-            if quote.get("c"):
-                return {"symbol": ticker, "name": profile.get("name") or ticker, "exchange": profile.get("exchange") or "Global", "sector": profile.get("finnhubIndustry") or "Other", "price": quote.get("c"), "change": quote.get("d"), "change_pct": quote.get("dp"), "high": quote.get("h"), "low": quote.get("l"), "previous_close": quote.get("pc"), "status": "Live provider data"}
-        except (requests.RequestException, ValueError):
-            pass
-    try:
-        history = yf.Ticker(ticker).history(period="5d")
-        if not history.empty:
-            latest = history.iloc[-1]
-            price = float(latest["Close"])
-            previous = float(history.iloc[-2]["Close"]) if len(history) > 1 else price
-            change = price - previous
-            return {"symbol": ticker, "name": ticker, "exchange": "Yahoo Finance", "sector": "Other", "price": round(price, 2), "change": round(change, 2), "change_pct": round(change / previous * 100, 2) if previous else 0, "high": float(latest["High"]), "low": float(latest["Low"]), "previous_close": round(previous, 2), "volume": int(latest["Volume"]), "status": "Delayed provider data"}
-    except Exception:
-        pass
-    return {"symbol": ticker, "name": ticker, "exchange": "Unknown", "sector": "Other", "price": None, "status": "Price unavailable"}
+    return market_data.quote(symbol)
 
 
 @app.get("/api/stocks/dashboard")

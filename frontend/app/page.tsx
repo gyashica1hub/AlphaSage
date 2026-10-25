@@ -44,7 +44,7 @@ type WatchlistItem = { id: string; symbol: string; created_at: string };
 type MarketInstrument = { name: string; symbol: string; region: string; price?: number | null; change?: number; change_pct?: number | null; status: string };
 type StockOption = { symbol: string; name: string; sector: string; exchange?: string };
 type StockHistoryPoint = { date: string; open?: number; high?: number; low?: number; close: number };
-type StockDetails = StockOption & { price?: number | null; change?: number; change_pct?: number; high?: number; low?: number; previous_close?: number; volume?: number; status: string; purchase_price?: number | null; history?: StockHistoryPoint[]; benchmark?: StockHistoryPoint[]; benchmark_symbol?: string; stock_return_pct?: number | null; benchmark_return_pct?: number | null; fundamentals?: { market_cap?: number | null; pe_ratio?: number | null; dividend_yield?: number | null; week52_high?: number | null; week52_low?: number | null } };
+type StockDetails = StockOption & { price?: number | null; change?: number; change_pct?: number; high?: number; low?: number; previous_close?: number; volume?: number; status: string; provider?: string | null; data_status?: "fresh" | "unavailable"; fetched_at?: string; purchase_price?: number | null; history?: StockHistoryPoint[]; benchmark?: StockHistoryPoint[]; benchmark_symbol?: string; stock_return_pct?: number | null; benchmark_return_pct?: number | null; fundamentals?: { market_cap?: number | null; pe_ratio?: number | null; dividend_yield?: number | null; week52_high?: number | null; week52_low?: number | null } };
 type AuthUser = { id: string; email: string; display_name?: string | null };
 
 function apiErrorMessage(body: any, fallback: string): string {
