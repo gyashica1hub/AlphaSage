@@ -532,18 +532,21 @@ function ReadableStockDashboard({ details, loading, expanded, onExpand, onClose 
 }
 
 function StockCandleChart({ details }: { details: StockDetails }) {
-  const history = (details.history || []).slice(-90);
+  const [range, setRange] = useState<"1M" | "3M" | "6M">("6M");
+  const allHistory = details.history || [];
+  const rangeSize = range === "1M" ? 22 : range === "3M" ? 66 : 90;
+  const history = allHistory.slice(-rangeSize);
   const prices = history.flatMap((point) => [point.high ?? point.close, point.low ?? point.close]);
   if (details.purchase_price != null) prices.push(details.purchase_price);
   const min = prices.length ? Math.min(...prices) : 0;
   const max = prices.length ? Math.max(...prices) : 1;
-  const range = Math.max(max - min, 1);
-  const yFor = (value: number) => 72 - ((value - min) / range) * 64;
+  const chartRange = Math.max(max - min, 1);
+  const yFor = (value: number) => 72 - ((value - min) / chartRange) * 64;
   const xFor = (index: number) => 12 + (index / Math.max(history.length - 1, 1)) * 296;
   const bodyWidth = Math.max(2, Math.min(7, 260 / Math.max(history.length, 1)));
   const purchaseY = details.purchase_price == null ? null : yFor(details.purchase_price);
 
-  return <div className="stock-chart readable-chart"><svg viewBox="0 0 320 80" role="img" aria-label={`${details.name} six month candlestick price chart`}>
+  return <div className="stock-chart readable-chart"><div className="chart-toolbar"><span>Price history</span><div className="chart-range-controls" role="group" aria-label="Chart time range">{(["1M", "3M", "6M"] as const).map((option) => <button type="button" key={option} className={range === option ? "active" : ""} onClick={() => setRange(option)}>{option}</button>)}</div></div><svg viewBox="0 0 320 80" role="img" aria-label={`${details.name} ${range} candlestick price chart`}>
     <line x1="0" x2="320" y1="8" y2="8" className="chart-grid-line" />
     <line x1="0" x2="320" y1="40" y2="40" className="chart-grid-line" />
     <line x1="0" x2="320" y1="72" y2="72" className="chart-grid-line" />
@@ -559,7 +562,7 @@ function StockCandleChart({ details }: { details: StockDetails }) {
       const bodyHeight = Math.max(1.5, Math.abs(yFor(open) - yFor(close)));
       return <g key={point.date}><line x1={x} x2={x} y1={yFor(high)} y2={yFor(low)} className={up ? "candle-wick-up" : "candle-wick-down"} /><rect x={x - bodyWidth / 2} y={bodyY} width={bodyWidth} height={bodyHeight} className={up ? "candle-up" : "candle-down"} /></g>;
     })}
-  </svg><div><span>6M candlestick trend {details.purchase_price != null && <em className="purchase-legend">Purchase ₹{details.purchase_price.toLocaleString("en-IN")}</em>}</span><span>{details.stock_return_pct == null ? "—" : `${details.stock_return_pct >= 0 ? "+" : ""}${details.stock_return_pct.toFixed(2)}%`}</span></div></div>;
+  </svg><div><span>{range} candlestick trend {details.purchase_price != null && <em className="purchase-legend">Purchase ₹{details.purchase_price.toLocaleString("en-IN")}</em>}</span><span>{details.stock_return_pct == null ? "—" : `${details.stock_return_pct >= 0 ? "+" : ""}${details.stock_return_pct.toFixed(2)}%`}</span></div></div>;
 }
 
 function ReadableStockDashboardV2({ details, loading, expanded, onExpand, onClose }: { details: StockDetails; loading: boolean; expanded: boolean; onExpand: () => void; onClose: () => void }) {
