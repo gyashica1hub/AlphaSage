@@ -610,6 +610,25 @@ def stock_details(symbol: str) -> dict:
     return {"symbol": ticker, "name": ticker, "exchange": "Unknown", "sector": "Other", "price": None, "status": "Price unavailable"}
 
 
+@app.get("/api/market-overview")
+def market_overview() -> list[dict]:
+    instruments = [("NIFTY 50", "^NSEI", "India"), ("SENSEX", "^BSESN", "India"), ("S&P 500", "^GSPC", "United States"), ("Dow Jones", "^DJI", "United States"), ("NASDAQ", "^IXIC", "United States")]
+    results = []
+    for name, symbol, region in instruments:
+        try:
+            history = yf.Ticker(symbol).history(period="5d")
+            if history.empty:
+                raise ValueError("No market data")
+            latest = history.iloc[-1]
+            price = float(latest["Close"])
+            previous = float(history.iloc[-2]["Close"]) if len(history) > 1 else price
+            change = price - previous
+            results.append({"name": name, "symbol": symbol, "region": region, "price": round(price, 2), "change": round(change, 2), "change_pct": round(change / previous * 100, 2) if previous else 0, "status": "Delayed provider data"})
+        except Exception:
+            results.append({"name": name, "symbol": symbol, "region": region, "price": None, "change_pct": None, "status": "Data unavailable"})
+    return results
+
+
 @app.post("/api/portfolio/holdings", status_code=201)
 def create_holding(holding: HoldingCreate, user: User = Depends(require_user)) -> dict:
     add_stock(
