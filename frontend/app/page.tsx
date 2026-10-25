@@ -202,9 +202,7 @@ export default function Home() {
       .catch((error) => setAlertMessage(error.message));
   };
 
-  const loadDeliveries = () => {
-    setBellOpen((open) => !open);
-    if (bellOpen) return;
+  const fetchDeliveries = () => {
     setDeliveriesLoading(true);
     fetch(`${apiUrl.replace(/\/portfolio$/, "")}/alerts/deliveries`, { credentials: "include" })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("Unable to load notifications")))
@@ -212,6 +210,18 @@ export default function Home() {
       .catch(() => setDeliveries([]))
       .finally(() => setDeliveriesLoading(false));
   };
+
+  const loadDeliveries = () => {
+    setBellOpen((open) => !open);
+    if (!bellOpen) fetchDeliveries();
+  };
+
+  useEffect(() => {
+    if (!authUser) return;
+    fetchDeliveries();
+    const timer = window.setInterval(fetchDeliveries, 30000);
+    return () => window.clearInterval(timer);
+  }, [authUser]);
 
   useEffect(() => {
     if (!authUser) return;
