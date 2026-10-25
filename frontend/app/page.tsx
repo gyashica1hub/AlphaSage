@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useState } from "react";
+import { ChangeEvent, PointerEvent, useEffect, useState } from "react";
 import {
   Bell, BriefcaseBusiness, ChevronDown, Database, Download, Globe2, LayoutDashboard,
   LineChart, Newspaper, Plus, Search, Settings, Settings2, ShieldCheck, Sparkles,
@@ -533,9 +533,12 @@ function ReadableStockDashboard({ details, loading, expanded, onExpand, onClose 
 
 function StockCandleChart({ details }: { details: StockDetails }) {
   const [range, setRange] = useState<"1M" | "3M" | "6M">("6M");
+  const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
+  const [drag, setDrag] = useState<{ start: number; current: number } | null>(null);
   const allHistory = details.history || [];
   const rangeSize = range === "1M" ? 22 : range === "3M" ? 66 : 90;
-  const history = allHistory.slice(-rangeSize);
+  const baseHistory = allHistory.slice(-rangeSize);
+  const history = selection ? baseHistory.slice(selection.start, selection.end + 1) : baseHistory;
   const prices = history.flatMap((point) => [point.high ?? point.close, point.low ?? point.close]);
   if (details.purchase_price != null) prices.push(details.purchase_price);
   const min = prices.length ? Math.min(...prices) : 0;
@@ -545,12 +548,30 @@ function StockCandleChart({ details }: { details: StockDetails }) {
   const xFor = (index: number) => 12 + (index / Math.max(history.length - 1, 1)) * 296;
   const bodyWidth = Math.max(2, Math.min(7, 260 / Math.max(history.length, 1)));
   const purchaseY = details.purchase_price == null ? null : yFor(details.purchase_price);
+  const chartX = (event: PointerEvent<SVGSVGElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return Math.max(12, Math.min(308, ((event.clientX - bounds.left) / bounds.width) * 320));
+  };
+  const indexForX = (x: number) => Math.round(((x - 12) / 296) * Math.max(baseHistory.length - 1, 1));
+  const finishSelection = (event: PointerEvent<SVGSVGElement>) => {
+    if (!drag) return;
+    const endX = chartX(event);
+    if (Math.abs(endX - drag.start) > 8) {
+      const first = Math.max(0, Math.min(indexForX(drag.start), indexForX(endX)));
+      const last = Math.min(baseHistory.length - 1, Math.max(indexForX(drag.start), indexForX(endX)));
+      if (last > first) setSelection({ start: first, end: last });
+    }
+    setDrag(null);
+  };
+  const selectionLeft = drag ? Math.min(drag.start, drag.current) : null;
+  const selectionWidth = drag ? Math.abs(drag.current - drag.start) : 0;
 
-  return <div className="stock-chart readable-chart"><div className="chart-toolbar"><span>Price history</span><div className="chart-range-controls" role="group" aria-label="Chart time range">{(["1M", "3M", "6M"] as const).map((option) => <button type="button" key={option} className={range === option ? "active" : ""} onClick={() => setRange(option)}>{option}</button>)}</div></div><svg viewBox="0 0 320 80" role="img" aria-label={`${details.name} ${range} candlestick price chart`}>
+  return <div className="stock-chart readable-chart"><div className="chart-toolbar"><span>Price history <small>Drag across the chart to zoom</small></span><div className="chart-range-controls" role="group" aria-label="Chart time range">{(["1M", "3M", "6M"] as const).map((option) => <button type="button" key={option} className={range === option ? "active" : ""} onClick={() => { setRange(option); setSelection(null); }}>{option}</button>)}{selection && <button type="button" onClick={() => setSelection(null)}>Reset</button>}</div></div><svg viewBox="0 0 320 80" role="img" aria-label={`${details.name} ${range} candlestick price chart`} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); setDrag({ start: chartX(event), current: chartX(event) }); }} onPointerMove={(event) => { if (drag) setDrag({ ...drag, current: chartX(event) }); }} onPointerUp={finishSelection} onPointerCancel={() => setDrag(null)}>
     <line x1="0" x2="320" y1="8" y2="8" className="chart-grid-line" />
     <line x1="0" x2="320" y1="40" y2="40" className="chart-grid-line" />
     <line x1="0" x2="320" y1="72" y2="72" className="chart-grid-line" />
     {purchaseY != null && <line x1="0" x2="320" y1={purchaseY} y2={purchaseY} className="purchase-price-line" />}
+    {selectionLeft != null && <rect x={selectionLeft} y="0" width={selectionWidth} height="80" className="chart-selection" />}
     {history.map((point) => {
       const open = point.open ?? point.close;
       const close = point.close;
