@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 
 from src.fetch_prices import get_portfolio_with_live_prices
 from src.logging_config import configure_logging
-from src.db.models import Alert, Note, Transaction, User, Watchlist, WatchlistItem
+from src.db.models import Alert, Note, PortfolioPosition, Transaction, User, Watchlist, WatchlistItem
 from src.db.sqlite import initialize_database
 from src.db.session import get_session
 from src.auth import create_email_verification_otp, create_password_reset_otp, create_session_token, create_user, find_user_by_email, hash_password, read_session_token, verify_email_verification_otp, verify_password, verify_password_reset_otp
@@ -318,9 +318,27 @@ def get_portfolio(user: User = Depends(require_user)) -> dict:
 def create_transaction(transaction: TransactionCreate, user: User = Depends(require_user)) -> dict:
     portfolio_id = load_portfolio_raw(user.id)["portfolio_id"]
     with get_session() as session:
+        symbol = transaction.symbol.upper()
+        position = session.query(PortfolioPosition).filter(PortfolioPosition.portfolio_id == portfolio_id, PortfolioPosition.symbol == symbol).first()
+        if transaction.side == "BUY":
+            if position:
+                total_quantity = position.quantity + transaction.quantity
+                position.average_buy_price = round(((position.quantity * position.average_buy_price) + (transaction.quantity * transaction.price)) / total_quantity, 2)
+                position.quantity = total_quantity
+                position.updated_at = datetime.now(UTC)
+            else:
+                now = datetime.now(UTC)
+                session.add(PortfolioPosition(id=str(uuid.uuid4()), portfolio_id=portfolio_id, symbol=symbol, name=symbol.replace(".NS", "").replace(".BO", ""), quantity=transaction.quantity, average_buy_price=transaction.price, sector="Other", created_at=now, updated_at=now))
+        elif not position or position.quantity < transaction.quantity:
+            raise HTTPException(status_code=400, detail="Sell quantity exceeds the current holding")
+        else:
+            position.quantity = round(position.quantity - transaction.quantity, 8)
+            position.updated_at = datetime.now(UTC)
+            if position.quantity == 0:
+                session.delete(position)
         session.add(Transaction(
             id=str(uuid.uuid4()), portfolio_id=portfolio_id,
-            symbol=transaction.symbol.upper(), side=transaction.side,
+            symbol=symbol, side=transaction.side,
             quantity=transaction.quantity, price=transaction.price,
             executed_at=transaction.executed_at or datetime.now(UTC),
         ))

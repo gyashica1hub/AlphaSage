@@ -224,7 +224,7 @@ export default function Home() {
       .then((response) => response.ok ? response.json() : response.json().then((body) => Promise.reject(new Error(apiErrorMessage(body, "Unable to add transaction")))))
       .then(() => fetch(`${apiUrl}/transactions`, { credentials: "include" }))
       .then((response) => response.json())
-      .then((data) => setTransactions(data));
+      .then((data) => { setTransactions(data); window.location.reload(); });
   };
   const removeTransaction = (id: string) => {
     fetch(`${apiUrl}/transactions/${id}`, { method: "DELETE", credentials: "include" })
