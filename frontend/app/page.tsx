@@ -102,6 +102,7 @@ export default function Home() {
   const [resetOtp, setResetOtp] = useState("");
   const [resetPassword, setResetPassword] = useState("");
   const [authChecked, setAuthChecked] = useState(false);
+  const [pageRestored, setPageRestored] = useState(false);
 
   useEffect(() => {
     if (!stockDetails) return;
@@ -118,9 +119,13 @@ export default function Home() {
   }, [apiUrl]);
 
   useEffect(() => {
-    if (!authUser) return;
+    if (!authUser) {
+      setPageRestored(false);
+      return;
+    }
     const savedPage = window.localStorage.getItem(`alphasage_active_page_${authUser.id}`);
-    if (savedPage && navigation.some((item) => item.label === savedPage)) setActive(savedPage);
+    setActive(savedPage && navigation.some((item) => item.label === savedPage) ? savedPage : "Portfolio");
+    setPageRestored(true);
   }, [authUser]);
 
   useEffect(() => {
@@ -327,7 +332,7 @@ export default function Home() {
       .finally(() => setAuthUser(null));
   };
 
-  if (!authChecked) {
+  if (!authChecked || (authUser && !pageRestored)) {
     return <LoadingScreen />;
   }
 
