@@ -47,6 +47,7 @@ type StockHistoryPoint = { date: string; open?: number; high?: number; low?: num
 type StockDetails = StockOption & { price?: number | null; change?: number; change_pct?: number; high?: number; low?: number; previous_close?: number; volume?: number; status: string; provider?: string | null; data_status?: "fresh" | "unavailable"; fetched_at?: string; history_quality?: { points: number; invalid_points: number; duplicate_dates: number; status: string }; corporate_actions?: { date: string; type: string; value: number }[]; purchase_price?: number | null; history?: StockHistoryPoint[]; benchmark?: StockHistoryPoint[]; benchmark_symbol?: string; stock_return_pct?: number | null; benchmark_return_pct?: number | null; fundamentals?: { market_cap?: number | null; pe_ratio?: number | null; dividend_yield?: number | null; week52_high?: number | null; week52_low?: number | null } };
 type AuthUser = { id: string; email: string; display_name?: string | null };
 type AlertRule = { id: string; symbol: string; rule: string; threshold: number; cooldown_minutes: number; last_triggered_at?: string | null; active: boolean };
+type AlertDelivery = { id: string; symbol?: string; channel: string; status: string; message: string; error?: string | null; created_at: string };
 
 function apiErrorMessage(body: any, fallback: string): string {
   if (typeof body?.detail === "string") return body.detail;
@@ -118,6 +119,9 @@ export default function Home() {
   const [alertForm, setAlertForm] = useState({ symbol: "RELIANCE.NS", rule: "price_above", threshold: "1000", cooldown_minutes: "60" });
   const [alertMessage, setAlertMessage] = useState("");
   const [alertsLoading, setAlertsLoading] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [deliveries, setDeliveries] = useState<AlertDelivery[]>([]);
+  const [deliveriesLoading, setDeliveriesLoading] = useState(false);
 
   useEffect(() => {
     if (!stockDetails || stockDetailsPinned) return;
@@ -184,6 +188,17 @@ export default function Home() {
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("Unable to evaluate alerts")))
       .then((data) => setAlertMessage(`${data.results?.length || 0} alert condition(s) evaluated. Check your email if a rule was triggered.`))
       .catch((error) => setAlertMessage(error.message));
+  };
+
+  const loadDeliveries = () => {
+    setBellOpen((open) => !open);
+    if (bellOpen) return;
+    setDeliveriesLoading(true);
+    fetch(`${apiUrl.replace(/\/portfolio$/, "")}/alerts/deliveries`, { credentials: "include" })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Unable to load notifications")))
+      .then((data: AlertDelivery[]) => setDeliveries(data))
+      .catch(() => setDeliveries([]))
+      .finally(() => setDeliveriesLoading(false));
   };
 
   useEffect(() => {
@@ -476,7 +491,7 @@ export default function Home() {
       <section className="content">
         <header className="topbar">
           <div className="breadcrumbs"><span>{active === "Portfolio" ? "Markets" : "Workspace"}</span><b>/</b><strong>{active}</strong></div>
-          <div className="top-actions"><button className="icon-button"><Bell size={17} /></button><button className="avatar">G</button></div>
+          <div className="top-actions"><div className="notification-wrap"><button className={`icon-button${bellOpen ? " active" : ""}`} onClick={loadDeliveries} aria-label="Open notifications"><Bell size={17} /></button>{bellOpen && <div className="notification-popover"><div className="notification-header"><strong>Notifications</strong><small>Alert activity</small></div>{deliveriesLoading ? <div className="notification-empty">Loading notifications…</div> : deliveries.length === 0 ? <div className="notification-empty">No alert activity yet.</div> : <div className="notification-list">{deliveries.slice(0, 8).map((delivery) => <div className="notification-item" key={delivery.id}><span className={`notification-status ${delivery.status}`} /> <div><strong>{delivery.message}</strong><small>{delivery.status} · {new Date(delivery.created_at).toLocaleString()}</small></div></div>)}</div>}<button className="notification-link" onClick={() => { setBellOpen(false); setActive("Alerts"); }}>Open Alerts</button></div>}</div><button className="avatar">G</button></div>
         </header>
 
         {active === "Portfolio" ? <>
