@@ -478,6 +478,17 @@ def get_alert_deliveries(user: User = Depends(require_user)) -> list[dict]:
         return [{"id": row.id, "alert_id": row.alert_id, "channel": row.channel, "status": row.status, "message": row.message, "error": row.error, "created_at": row.created_at.isoformat()} for row in rows]
 
 
+@app.delete("/api/alerts/{alert_id}")
+def delete_alert(alert_id: str, user: User = Depends(require_user)) -> dict:
+    with get_session() as session:
+        row = session.query(Alert).filter(Alert.id == alert_id, Alert.user_id == user.id).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Alert not found")
+        session.delete(row)
+        session.commit()
+    return {"status": "deleted", "id": alert_id}
+
+
 def _finnhub_search(query: str) -> list[dict]:
     token = os.getenv("FINNHUB_API_KEY")
     if not token:
