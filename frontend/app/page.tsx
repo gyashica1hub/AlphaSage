@@ -119,6 +119,16 @@ export default function Home() {
 
   useEffect(() => {
     if (!authUser) return;
+    const savedPage = window.localStorage.getItem(`alphasage_active_page_${authUser.id}`);
+    if (savedPage && navigation.some((item) => item.label === savedPage)) setActive(savedPage);
+  }, [authUser]);
+
+  useEffect(() => {
+    if (authUser) window.localStorage.setItem(`alphasage_active_page_${authUser.id}`, active);
+  }, [active, authUser]);
+
+  useEffect(() => {
+    if (!authUser) return;
     fetch(apiUrl, { credentials: "include" })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("API unavailable")))
       .then((data) => {
