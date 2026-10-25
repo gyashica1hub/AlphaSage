@@ -43,7 +43,8 @@ type Watchlist = { id: string; name: string };
 type WatchlistItem = { id: string; symbol: string; created_at: string };
 type MarketInstrument = { name: string; symbol: string; region: string; price?: number | null; change?: number; change_pct?: number | null; status: string };
 type StockOption = { symbol: string; name: string; sector: string; exchange?: string };
-type StockDetails = StockOption & { price?: number | null; change?: number; change_pct?: number; high?: number; low?: number; previous_close?: number; volume?: number; status: string };
+type StockHistoryPoint = { date: string; close: number };
+type StockDetails = StockOption & { price?: number | null; change?: number; change_pct?: number; high?: number; low?: number; previous_close?: number; volume?: number; status: string; history?: StockHistoryPoint[]; benchmark?: StockHistoryPoint[]; benchmark_symbol?: string; stock_return_pct?: number | null; benchmark_return_pct?: number | null; fundamentals?: { market_cap?: number | null; pe_ratio?: number | null; dividend_yield?: number | null; week52_high?: number | null; week52_low?: number | null } };
 type AuthUser = { id: string; email: string; display_name?: string | null };
 
 function apiErrorMessage(body: any, fallback: string): string {
@@ -256,7 +257,7 @@ export default function Home() {
   const chooseStock = (stock: StockOption) => {
     setNewHolding((current) => ({ ...current, symbol: stock.symbol, name: stock.name, sector: stock.sector || "Other" }));
     setStockDetailsLoading(true); setStockDetails(null);
-    fetch(`${apiUrl.replace(/\/portfolio$/, "")}/stocks/details?symbol=${encodeURIComponent(stock.symbol)}`).then((response) => response.ok ? response.json() : Promise.reject(new Error("Details unavailable"))).then((data) => setStockDetails({ ...stock, ...data })).catch(() => setStockDetails({ ...stock, status: "Details unavailable" })).finally(() => setStockDetailsLoading(false));
+    fetch(`${apiUrl.replace(/\/portfolio$/, "")}/stocks/dashboard?symbol=${encodeURIComponent(stock.symbol)}`).then((response) => response.ok ? response.json() : Promise.reject(new Error("Details unavailable"))).then((data) => setStockDetails({ ...stock, ...data })).catch(() => setStockDetails({ ...stock, status: "Details unavailable" })).finally(() => setStockDetailsLoading(false));
     setStockSearchQuery(""); setStockSearchOpen(false);
   };
   const chooseCustomStock = () => {
@@ -311,7 +312,7 @@ export default function Home() {
   const viewWatchlistStock = (symbol: string, name: string) => {
     setStockDetailsLoading(true);
     setStockDetails({ symbol, name, sector: "Other", status: "Loading" });
-    fetch(`${apiUrl.replace(/\/portfolio$/, "")}/stocks/details?symbol=${encodeURIComponent(symbol)}`)
+    fetch(`${apiUrl.replace(/\/portfolio$/, "")}/stocks/dashboard?symbol=${encodeURIComponent(symbol)}`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("Details unavailable")))
       .then((data) => setStockDetails({ symbol, name: data.name || name, sector: data.sector || "Other", ...data }))
       .catch(() => setStockDetails({ symbol, name, sector: "Other", status: "Details unavailable" }))
@@ -483,7 +484,7 @@ export default function Home() {
         {showAuth && <div className="modal-backdrop" onClick={() => setShowAuth(false)}><section className="add-modal auth-modal" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><div className="kicker">ALPHASAGE ACCOUNT</div><h2>{authMode === "login" ? "Welcome back" : "Create your account"}</h2></div><button className="icon-button" onClick={() => setShowAuth(false)}>×</button></div><p className="modal-copy">{authMode === "login" ? "Sign in to sync your portfolio and watchlists across devices." : "Create a secure workspace for your investment research."}</p>{authMode === "register" && <label>Display name<input value={authForm.display_name} onChange={(event) => setAuthForm({ ...authForm, display_name: event.target.value })} placeholder="Your name" /></label>}<label>Email<input type="email" value={authForm.email} onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })} placeholder="you@example.com" /></label><label>Password<input type="password" value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} placeholder="At least 8 characters" /></label>{authError && <p className="auth-error">{authError}</p>}<div className="modal-actions"><button className="secondary" onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}>{authMode === "login" ? "Create account" : "Sign in instead"}</button><button className="primary" onClick={submitAuth}>{authMode === "login" ? "Sign in" : "Create account"}</button></div></section></div>}
         </> : active === "Watchlists" ? <WatchlistsPage watchlists={watchlists} items={watchlistItems} quotes={watchlistQuotes} symbol={watchlistSymbol} suggestions={stockSuggestions} searching={stockSearching} searchOpen={stockSearchOpen && stockSearchField === "symbol"} refreshing={watchlistRefreshing} onSymbolChange={(value) => { setWatchlistSymbol(value); setStockSearchQuery(value); setStockSearchField("symbol"); setStockSearchOpen(true); }} onSearchFocus={() => { setStockSearchField("symbol"); setStockSearchQuery(watchlistSymbol); setStockSearchOpen(true); }} onSelect={chooseWatchlistStock} onCreate={createWatchlist} onAdd={addWatchlistSymbol} onRemove={removeWatchlistSymbol} onViewStock={viewWatchlistStock} onRefresh={refreshWatchlistQuotes} /> : active === "Global markets" ? <MarketOverviewPage instruments={marketInstruments} loading={marketsLoading} onRefresh={() => setMarketRefreshKey((value) => value + 1)} /> : <WorkspacePage active={active} />}
       </section>
-      {stockDetails && <StockPreview details={stockDetails} loading={stockDetailsLoading} />}
+      {stockDetails && <StockDashboardPreview details={stockDetails} loading={stockDetailsLoading} />}
     </main>
   );
 }
@@ -506,6 +507,15 @@ function Insight({ label, value, detail, tone = "" }: { label: string; value: st
 function StockPreview({ details, loading }: { details: StockDetails | null; loading: boolean }) {
   if (!details) return null;
   return <aside className="stock-preview"><div className="preview-heading"><div><span className="kicker">SELECTED INSTRUMENT</span><strong>{details.name}</strong><small>{details.symbol} · {details.exchange}</small></div><span className="preview-status">{loading ? "Loading" : details.status}</span></div><div className="preview-price">{details.price == null ? "Price unavailable" : `₹${details.price.toLocaleString("en-IN")}`} {details.change_pct != null && <small className={details.change_pct < 0 ? "negative" : "positive"}>{details.change_pct >= 0 ? "+" : ""}{details.change_pct.toFixed(2)}%</small>}</div><div className="preview-meta"><span>Sector<strong>{details.sector}</strong></span><span>Day high<strong>{details.high == null ? "—" : details.high}</strong></span><span>Day low<strong>{details.low == null ? "—" : details.low}</strong></span><span>Previous close<strong>{details.previous_close == null ? "—" : details.previous_close}</strong></span></div></aside>;
+}
+
+function StockDashboardPreview({ details, loading }: { details: StockDetails; loading: boolean }) {
+  const history = details.history || [];
+  const values = history.map((point) => point.close);
+  const min = values.length ? Math.min(...values) : 0;
+  const max = values.length ? Math.max(...values) : 1;
+  const points = history.map((point, index) => `${(index / Math.max(history.length - 1, 1)) * 320},${72 - ((point.close - min) / Math.max(max - min, 1)) * 64}`).join(" ");
+  return <aside className="stock-preview"><div className="preview-heading"><div><span className="kicker">SELECTED INSTRUMENT</span><strong>{details.name}</strong><small>{details.symbol} · {details.exchange}</small></div><span className="preview-status">{loading ? "Loading" : details.status}</span></div><div className="preview-price">{details.price == null ? "Price unavailable" : `₹${details.price.toLocaleString("en-IN")}`} {details.change_pct != null && <small className={details.change_pct < 0 ? "negative" : "positive"}>{details.change_pct >= 0 ? "+" : ""}{details.change_pct.toFixed(2)}%</small>}</div>{history.length > 1 && <div className="stock-chart"><svg viewBox="0 0 320 80" role="img" aria-label={`${details.name} six month price chart`}><polyline points={points} fill="none" stroke="var(--green)" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg><div><span>6M price trend</span><span>{details.stock_return_pct == null ? "—" : `${details.stock_return_pct >= 0 ? "+" : ""}${details.stock_return_pct.toFixed(2)}%`}</span></div></div>}<div className="preview-meta"><span>Sector<strong>{details.sector}</strong></span><span>Day high<strong>{details.high == null ? "—" : details.high}</strong></span><span>Day low<strong>{details.low == null ? "—" : details.low}</strong></span><span>Previous close<strong>{details.previous_close == null ? "—" : details.previous_close}</strong></span></div><div className="preview-fundamentals"><span><small>Market cap</small><strong>{details.fundamentals?.market_cap ? `₹${(details.fundamentals.market_cap / 10000000).toFixed(1)} Cr` : "—"}</strong></span><span><small>P/E ratio</small><strong>{details.fundamentals?.pe_ratio?.toFixed(2) || "—"}</strong></span><span><small>52W range</small><strong>{details.fundamentals?.week52_low && details.fundamentals?.week52_high ? `${details.fundamentals.week52_low} – ${details.fundamentals.week52_high}` : "—"}</strong></span><span><small>vs {details.benchmark_symbol || "benchmark"}</small><strong>{details.benchmark_return_pct == null ? "—" : `${details.benchmark_return_pct >= 0 ? "+" : ""}${details.benchmark_return_pct.toFixed(2)}%`}</strong></span></div></aside>;
 }
 
 function StockSearchField({ label, value, placeholder, onChange, onFocus, open, suggestions, searching, onSelect, onCustom }: { label: string; value: string; placeholder: string; onChange: (value: string) => void; onFocus: () => void; open: boolean; suggestions: StockOption[]; searching: boolean; onSelect: (stock: StockOption) => void; onCustom: () => void }) {

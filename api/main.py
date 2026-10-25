@@ -610,6 +610,34 @@ def stock_details(symbol: str) -> dict:
     return {"symbol": ticker, "name": ticker, "exchange": "Unknown", "sector": "Other", "price": None, "status": "Price unavailable"}
 
 
+@app.get("/api/stocks/dashboard")
+def stock_dashboard(symbol: str) -> dict:
+    ticker = symbol.strip().upper()
+    details = stock_details(ticker)
+    benchmark_symbol = "^NSEI" if ticker.endswith(".NS") else "^GSPC"
+    history_points: list[dict] = []
+    benchmark_points: list[dict] = []
+    fundamentals = {"market_cap": None, "pe_ratio": None, "dividend_yield": None, "week52_high": None, "week52_low": None}
+    try:
+        stock_history = yf.Ticker(ticker).history(period="6mo", interval="1d")
+        benchmark_history = yf.Ticker(benchmark_symbol).history(period="6mo", interval="1d")
+        if not stock_history.empty:
+            history_points = [{"date": index.strftime("%Y-%m-%d"), "close": round(float(row["Close"]), 2)} for index, row in stock_history.iterrows() if row["Close"] == row["Close"]]
+        if not benchmark_history.empty:
+            benchmark_points = [{"date": index.strftime("%Y-%m-%d"), "close": round(float(row["Close"]), 2)} for index, row in benchmark_history.iterrows() if row["Close"] == row["Close"]]
+        info = yf.Ticker(ticker).info
+        fundamentals = {"market_cap": info.get("marketCap"), "pe_ratio": info.get("trailingPE"), "dividend_yield": info.get("dividendYield"), "week52_high": info.get("fiftyTwoWeekHigh"), "week52_low": info.get("fiftyTwoWeekLow")}
+    except Exception:
+        logging.getLogger(__name__).warning("stock_dashboard_data_unavailable", extra={"symbol": ticker})
+    stock_return = None
+    benchmark_return = None
+    if len(history_points) > 1:
+        stock_return = round((history_points[-1]["close"] / history_points[0]["close"] - 1) * 100, 2)
+    if len(benchmark_points) > 1:
+        benchmark_return = round((benchmark_points[-1]["close"] / benchmark_points[0]["close"] - 1) * 100, 2)
+    return {**details, "history": history_points[-130:], "benchmark": benchmark_points[-130:], "benchmark_symbol": benchmark_symbol, "stock_return_pct": stock_return, "benchmark_return_pct": benchmark_return, "fundamentals": fundamentals}
+
+
 @app.get("/api/market-overview")
 def market_overview() -> list[dict]:
     instruments = [("NIFTY 50", "^NSEI", "India"), ("SENSEX", "^BSESN", "India"), ("S&P 500", "^GSPC", "United States"), ("Dow Jones", "^DJI", "United States"), ("NASDAQ", "^IXIC", "United States")]
