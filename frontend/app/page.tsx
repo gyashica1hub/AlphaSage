@@ -279,7 +279,11 @@ export default function Home() {
       .finally(() => setAuthUser(null));
   };
 
-  if (!authChecked || !authUser) {
+  if (!authChecked) {
+    return <LoadingScreen />;
+  }
+
+  if (!authUser) {
     return <AuthGate mode={authMode} form={authForm} error={authError} notice={authNotice} otpSent={otpSent} emailVerificationSent={emailVerificationSent} otp={resetOtp} verificationOtp={verificationOtp} resetPassword={resetPassword} onOtpChange={setResetOtp} onVerificationOtpChange={setVerificationOtp} onResetPasswordChange={setResetPassword} onModeChange={(mode) => { setAuthMode(mode); setAuthError(""); setAuthNotice(""); setOtpSent(false); setEmailVerificationSent(false); }} onChange={setAuthForm} onSubmit={submitAuth} onForgot={requestPasswordReset} onOtpSubmit={submitOtpReset} onVerifyEmail={verifyEmail} onGoogle={() => { window.location.href = `${apiUrl.replace(/\/portfolio$/, "")}/auth/google/start`; }} />;
   }
 
@@ -367,6 +371,10 @@ export default function Home() {
       {stockDetails && <StockPreview details={stockDetails} loading={stockDetailsLoading} />}
     </main>
   );
+}
+
+function LoadingScreen() {
+  return <main className="loading-screen" aria-live="polite"><div className="loading-brand"><div className="brand-mark"><Sparkles size={19} /></div><strong>AlphaSage</strong></div><div className="loading-spinner" /><p>Loading your workspace…</p></main>;
 }
 
 function AuthGate({ mode, form, error, notice, otpSent, emailVerificationSent, otp, verificationOtp, resetPassword, onOtpChange, onVerificationOtpChange, onResetPasswordChange, onModeChange, onChange, onSubmit, onForgot, onOtpSubmit, onVerifyEmail, onGoogle }: { mode: "login" | "register"; form: { email: string; password: string; display_name: string }; error: string; notice: string; otpSent: boolean; emailVerificationSent: boolean; otp: string; verificationOtp: string; resetPassword: string; onOtpChange: (value: string) => void; onVerificationOtpChange: (value: string) => void; onResetPasswordChange: (value: string) => void; onModeChange: (mode: "login" | "register") => void; onChange: (form: { email: string; password: string; display_name: string }) => void; onSubmit: () => void; onForgot: (email: string) => void; onOtpSubmit: () => void; onVerifyEmail: () => void; onGoogle: () => void }) {
