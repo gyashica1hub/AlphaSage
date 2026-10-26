@@ -765,8 +765,15 @@ function MarketAreaChart({ details, range, chartMode, compare, indicators }: { d
   const historical = details.history || [];
   const intraday = details.intraday_history || [];
   const source = range === "1D" && intraday.length > 1 ? intraday : historical;
-  const pointsByRange: Record<string, number> = { "5D": 5, "1M": 22, "YTD": 130, "1Y": 252 };
-  const history = pointsByRange[range] ? source.slice(-pointsByRange[range]) : source;
+  const latestTimestamp = source.length ? new Date(source[source.length - 1].date).getTime() : Date.now();
+  const latestDate = new Date(latestTimestamp);
+  const cutoff = new Date(latestDate);
+  if (range === "5D") cutoff.setDate(cutoff.getDate() - 5);
+  if (range === "1M") cutoff.setMonth(cutoff.getMonth() - 1);
+  if (range === "YTD") cutoff.setMonth(0, 1);
+  if (range === "1Y") cutoff.setFullYear(cutoff.getFullYear() - 1);
+  if (range === "5Y") cutoff.setFullYear(cutoff.getFullYear() - 5);
+  const history = range === "MAX" || range === "6M" ? source : source.filter((point) => new Date(point.date).getTime() >= cutoff.getTime());
   const benchmark = details.benchmark || [];
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const values = history.map((point) => point.close);
