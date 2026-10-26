@@ -1,9 +1,11 @@
 """FastAPI entry point for the AlphaSage web frontend."""
 
 import csv
+import html
 import hashlib
 import json
 import os
+import re
 import secrets
 import uuid
 from datetime import UTC, datetime
@@ -40,6 +42,15 @@ from src.market_cache import MarketCache
 from src.alert_service import evaluate_alerts
 
 load_dotenv()
+
+
+def clean_news_description(value: str | None) -> str | None:
+    """Turn provider RSS/HTML snippets into readable plain text."""
+    if not value:
+        return None
+    text = re.sub(r"<[^>]+>", " ", html.unescape(value))
+    text = re.sub(r"\s+", " ", text).strip()
+    return text or None
 configure_logging()
 initialize_database()
 market_data = MarketDataService(cache=MarketCache())
@@ -445,7 +456,7 @@ def get_news(query: str = "Indian stock market", page_size: int = 12, user: User
                 title = item.findtext("title") or ""
                 url = item.findtext("link") or ""
                 if title and url:
-                    articles.append({"title": title, "url": url, "source": item.findtext("source") or "Google News source", "published_at": item.findtext("pubDate"), "description": item.findtext("description"), "sentiment": "Neutral"})
+                    articles.append({"title": title, "url": url, "source": item.findtext("source") or "Google News source", "published_at": item.findtext("pubDate"), "description": clean_news_description(item.findtext("description")), "sentiment": "Neutral"})
             return {"articles": articles, "status": "Live headlines via Google News RSS"}
         except (requests.RequestException, ET.ParseError):
             return {"articles": [], "status": "Live news provider unavailable"}
@@ -463,7 +474,7 @@ def get_news(query: str = "Indian stock market", page_size: int = 12, user: User
             except ImportError:
                 pass
             sentiment = "Positive" if polarity >= 0.05 else ("Negative" if polarity <= -0.05 else "Neutral")
-            articles.append({"title": title, "url": article["url"], "source": (article.get("source") or {}).get("name") or "Unknown source", "published_at": article.get("publishedAt"), "description": article.get("description"), "sentiment": sentiment})
+            articles.append({"title": title, "url": article["url"], "source": (article.get("source") or {}).get("name") or "Unknown source", "published_at": article.get("publishedAt"), "description": clean_news_description(article.get("description")), "sentiment": sentiment})
     return {"articles": articles, "status": "Live provider headlines"}
 
 
