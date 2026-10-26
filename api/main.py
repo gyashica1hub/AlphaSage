@@ -109,6 +109,14 @@ class ResearchDocumentCreate(BaseModel):
     content: str = Field(min_length=20, max_length=200000)
 
 
+class NewsArticle(BaseModel):
+    title: str
+    url: str
+    source: str
+    published_at: str | None = None
+    description: str | None = None
+
+
 class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=200)
     password: str = Field(min_length=8, max_length=200)
@@ -417,6 +425,22 @@ def search_research_documents(query: str, symbol: str | None = None, user: User 
     documents = [{"id": row.id, "symbol": row.symbol, "source_url": row.source_url, "source_title": row.source_title, "content": row.content, "created_at": row.created_at.isoformat()} for row in rows]
     results = rank_documents(documents, query, symbol=symbol)
     return {"query": query, "symbol": symbol.upper() if symbol else None, "results": results, "citation_required": True}
+
+
+@app.get("/api/news")
+def get_news(query: str = "Indian stock market", page_size: int = 12, user: User = Depends(require_user)) -> dict:
+    """Return linked headlines from the configured provider; never fabricate news."""
+    api_key = os.getenv("NEWS_API_KEY", "")
+    if not api_key:
+        return {"articles": [], "status": "News provider is not configured"}
+    response = requests.get("https://newsapi.org/v2/everything", params={"q": query, "language": "en", "sortBy": "publishedAt", "pageSize": min(page_size, 50), "apiKey": api_key}, timeout=12)
+    if not response.ok:
+        return {"articles": [], "status": "News provider unavailable"}
+    articles = []
+    for article in response.json().get("articles", []):
+        if article.get("title") and article.get("url"):
+            articles.append({"title": article["title"], "url": article["url"], "source": (article.get("source") or {}).get("name") or "Unknown source", "published_at": article.get("publishedAt"), "description": article.get("description")})
+    return {"articles": articles, "status": "Live provider headlines"}
 
 
 @app.post("/api/portfolio/transactions", status_code=201)

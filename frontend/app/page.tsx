@@ -50,6 +50,7 @@ type AlertRule = { id: string; symbol: string; rule: string; threshold: number; 
 type AlertDelivery = { id: string; symbol?: string; channel: string; status: string; message: string; error?: string | null; created_at: string };
 type ResearchDocument = { id: string; symbol?: string | null; source_url: string; source_title: string; content_hash: string; created_at: string };
 type ResearchResult = { score: number; citation: { document_id: string; title: string; url: string }; excerpt: string };
+type NewsArticle = { title: string; url: string; source: string; published_at?: string | null; description?: string | null };
 type RiskMetric = { symbol: string; status: string; observations?: number; volatility?: number; max_drawdown?: number; downside_deviation?: number };
 
 function apiErrorMessage(body: any, fallback: string): string {
@@ -143,6 +144,8 @@ export default function Home() {
   const [researchForm, setResearchForm] = useState({ symbol: "", source_title: "", source_url: "", content: "" });
   const [researchMessage, setResearchMessage] = useState("");
   const [researchLoading, setResearchLoading] = useState(false);
+  const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([]);
+  const [newsStatus, setNewsStatus] = useState("");
   const [riskMetrics, setRiskMetrics] = useState<RiskMetric[]>([]);
   const [riskMetricsLoading, setRiskMetricsLoading] = useState(false);
 
@@ -195,6 +198,14 @@ export default function Home() {
       .then((data: AlertRule[]) => setAlerts(data))
       .catch(() => setAlerts([]))
       .finally(() => setAlertsLoading(false));
+  }, [active, apiUrl, authUser]);
+
+  useEffect(() => {
+    if (!authUser || active !== "News intelligence") return;
+    fetch(`${apiUrl.replace(/\/portfolio$/, "")}/news`, { credentials: "include" })
+      .then((response) => response.json())
+      .then((data) => { setNewsArticles(data.articles || []); setNewsStatus(data.status || ""); })
+      .catch(() => { setNewsArticles([]); setNewsStatus("News provider unavailable"); });
   }, [active, apiUrl, authUser]);
 
   useEffect(() => {
@@ -753,7 +764,18 @@ function StockSearchField({ label, value, placeholder, onChange, onFocus, open, 
   return <label className="stock-search-field">{label}<div className="stock-search-control"><Search size={15} /><input value={value} onChange={(event) => onChange(event.target.value)} onFocus={onFocus} placeholder={placeholder} />{searching && <span className="search-spinner" />}</div>{open && searching && <div className="stock-results search-status">Searching live instruments…</div>}{open && !searching && suggestions.length > 0 && <div className="stock-results">{suggestions.map((stock) => <button type="button" className="stock-result" key={`${stock.symbol}-${stock.name}`} onMouseDown={(event) => event.preventDefault()} onClick={() => onSelect(stock)}><span><strong>{stock.symbol}</strong><small>{stock.name}</small></span><em>{stock.exchange || stock.sector}</em></button>)}</div>}{open && !searching && value.length > 1 && suggestions.length === 0 && <div className="stock-results"><div className="empty-results">No live result yet</div><button type="button" className="stock-custom-result" onMouseDown={(event) => event.preventDefault()} onClick={onCustom}><strong>Use “{value}” as a custom instrument</strong><small>You can add any valid market symbol and update its details later.</small></button></div>}</label>;
 }
 
-function ResearchPage({ documents, results, query, form, message, loading, onQueryChange, onFormChange, onSearch, onIngest }: { documents: ResearchDocument[]; results: ResearchResult[]; query: string; form: { symbol: string; source_title: string; source_url: string; content: string }; message: string; loading: boolean; onQueryChange: (value: string) => void; onFormChange: (form: { symbol: string; source_title: string; source_url: string; content: string }) => void; onSearch: () => void; onIngest: () => void }) {
+function ResearchPage(props: { documents: ResearchDocument[]; results: ResearchResult[]; query: string; form: { symbol: string; source_title: string; source_url: string; content: string }; message: string; loading: boolean; onQueryChange: (value: string) => void; onFormChange: (form: { symbol: string; source_title: string; source_url: string; content: string }) => void; onSearch: () => void; onIngest: () => void }) {
+  return <><div className="news-feed-card"><div className="section-heading"><div><div className="kicker">LIVE MARKET NEWS</div><h2>Latest headlines</h2></div><span>Source-linked</span></div><NewsFeed /></div><ResearchDocumentsPage {...props} /></>;
+}
+
+function NewsFeed() {
+  const [articles, setArticles] = useState<NewsArticle[]>([]);
+  const [status, setStatus] = useState("Loading headlines…");
+  useEffect(() => { fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"}/news`, { credentials: "include" }).then((response) => response.json()).then((data) => { setArticles(data.articles || []); setStatus(data.status || ""); }).catch(() => setStatus("News provider unavailable")); }, []);
+  return articles.length ? <div className="news-feed-list">{articles.map((article) => <a className="news-item" href={article.url} target="_blank" rel="noreferrer" key={`${article.url}-${article.title}`}><div><strong>{article.title}</strong><small>{article.source}{article.published_at ? ` · ${new Date(article.published_at).toLocaleString()}` : ""}</small></div><span>Read source ↗</span></a>)}</div> : <div className="activity-empty">{status}. Headlines will appear here when NEWS_API_KEY is configured.</div>;
+}
+
+function ResearchDocumentsPage({ documents, results, query, form, message, loading, onQueryChange, onFormChange, onSearch, onIngest }: { documents: ResearchDocument[]; results: ResearchResult[]; query: string; form: { symbol: string; source_title: string; source_url: string; content: string }; message: string; loading: boolean; onQueryChange: (value: string) => void; onFormChange: (form: { symbol: string; source_title: string; source_url: string; content: string }) => void; onSearch: () => void; onIngest: () => void }) {
   return <><div className="page-header"><div><div className="kicker">SOURCE-AWARE RESEARCH</div><h1>Research intelligence.</h1><p>Save trusted documents and search them with citations attached to every result.</p></div></div><div className="disclaimer"><ShieldCheck size={16} /><span><strong>Citation-first workspace.</strong> Search results always include their source document and URL.</span></div><section className="research-layout"><div><section className="research-card"><div className="section-heading"><div><div className="kicker">INGEST SOURCE</div><h2>Add research document</h2></div></div><div className="research-form"><input placeholder="Company symbol (optional)" value={form.symbol} onChange={(event) => onFormChange({ ...form, symbol: event.target.value })} /><input placeholder="Source title" value={form.source_title} onChange={(event) => onFormChange({ ...form, source_title: event.target.value })} /><input placeholder="Source URL" value={form.source_url} onChange={(event) => onFormChange({ ...form, source_url: event.target.value })} /><textarea placeholder="Paste research content here…" rows={7} value={form.content} onChange={(event) => onFormChange({ ...form, content: event.target.value })} /><button className="primary" onClick={onIngest}>Save source</button></div>{message && <p className="research-message">{message}</p>}</section><section className="research-card"><div className="section-heading"><div><div className="kicker">HYBRID SEARCH</div><h2>Search your sources</h2></div><span>{loading ? "Searching…" : `${results.length} results`}</span></div><div className="research-search"><input placeholder="Search revenue, risks, earnings…" value={query} onChange={(event) => onQueryChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onSearch(); }} /><button className="primary compact" onClick={onSearch}>Search</button></div>{results.length === 0 ? <div className="activity-empty">Search saved research to see cited excerpts here.</div> : <div className="research-results">{results.map((result) => <article key={result.citation.document_id}><div><strong>{result.citation.title}</strong><span>Relevance {result.score}</span></div><p>{result.excerpt}</p><a href={result.citation.url} target="_blank" rel="noreferrer">Open source ↗</a></article>)}</div>}</section></div><section className="research-card research-library"><div className="section-heading"><div><div className="kicker">SOURCE LIBRARY</div><h2>Saved documents</h2></div><span>{documents.length}</span></div>{documents.length === 0 ? <div className="activity-empty">No research documents saved yet.</div> : <div className="research-documents">{documents.map((document) => <article key={document.id}><strong>{document.source_title}</strong><small>{document.symbol || "General research"} · {new Date(document.created_at).toLocaleDateString()}</small><a href={document.source_url} target="_blank" rel="noreferrer">{document.source_url}</a></article>)}</div>}</section></section></>;
 }
 
