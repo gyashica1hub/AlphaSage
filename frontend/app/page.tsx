@@ -852,6 +852,7 @@ function WorkspacePage({ active }: { active: string }) {
   if (active === "Pricing") return <PricingPage />;
   if (active === "Dashboard") return <DashboardOverviewPage />;
   if (active === "Scanner") return <ScannerPage />;
+  if (active === "Settings") return <SettingsPage />;
   const copy: Record<string, { kicker: string; title: string; subtitle: string; action: string; items: [string, string, string][] }> = {
     Dashboard: { kicker: "MARKET OVERVIEW", title: "Good morning, investor.", subtitle: "A focused view of your portfolio, watchlist, and the market signals worth your attention.", action: "Customize dashboard", items: [["Portfolio pulse", "Your workspace is ready", "Connect holdings to unlock live insights."], ["Market breadth", "Mixed session", "Track indices, sectors, and global markets."], ["AI research", "Ask AlphaSage", "Get cited answers about companies and markets."]] },
     Scanner: { kicker: "DISCOVERY WORKSPACE", title: "Find your next signal.", subtitle: "Screen the market using momentum, valuation, quality, and risk factors.", action: "Create a screen", items: [["Momentum", "Coming soon", "Discover stocks showing relative strength."], ["Quality", "Coming soon", "Filter companies by durable fundamentals."], ["Risk", "Coming soon", "Identify volatility and drawdown patterns."]] },
@@ -870,6 +871,38 @@ function WorkspacePage({ active }: { active: string }) {
     <section className="workspace-hero"><div><div className="eyebrow"><Sparkles size={14} /> BUILT FOR BETTER RESEARCH</div><h2>Clarity before conviction.</h2><p>AlphaSage brings your market context, portfolio signals, and research workflow into one calm workspace.</p></div><div className="workspace-ring"><Sparkles size={22} /><span>AI<br />READY</span></div></section>
     <section className="workspace-grid">{view.items.map(([label, value, detail]) => <article className="workspace-card" key={label}><div className="card-icon"><LineChart size={16} /></div><span>{label}</span><strong>{value}</strong><p>{detail}</p><button className="text-action">Explore <ChevronDown size={14} /></button></article>)}</section>
   </>;
+}
+
+function SettingsPage() {
+  const [displayName, setDisplayName] = useState("");
+  const [emailUpdates, setEmailUpdates] = useState(true);
+  const [compactMode, setCompactMode] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    setDisplayName(localStorage.getItem("alphasage.displayName") || "");
+    setEmailUpdates(localStorage.getItem("alphasage.emailUpdates") !== "false");
+    setCompactMode(localStorage.getItem("alphasage.compactMode") === "true");
+  }, []);
+
+  const save = () => {
+    localStorage.setItem("alphasage.displayName", displayName.trim());
+    localStorage.setItem("alphasage.emailUpdates", String(emailUpdates));
+    localStorage.setItem("alphasage.compactMode", String(compactMode));
+    document.documentElement.dataset.compactMode = compactMode ? "true" : "false";
+    setMessage("Your preferences were saved on this device.");
+  };
+
+  const reset = () => {
+    localStorage.removeItem("alphasage.displayName");
+    localStorage.removeItem("alphasage.emailUpdates");
+    localStorage.removeItem("alphasage.compactMode");
+    setDisplayName(""); setEmailUpdates(true); setCompactMode(false);
+    delete document.documentElement.dataset.compactMode;
+    setMessage("Settings were reset.");
+  };
+
+  return <><div className="page-header"><div><div className="kicker">WORKSPACE SETTINGS</div><h1>Make AlphaSage yours.</h1><p>Manage your profile, notification preferences, and research display settings.</p></div><button className="primary" onClick={save}>Save changes</button></div><div className="disclaimer"><ShieldCheck size={16} /><span><strong>Private preferences.</strong> These settings are stored locally in this development workspace.</span></div><section className="settings-layout"><div className="settings-card"><div className="section-heading"><div><div className="kicker">PROFILE</div><h2>Your workspace profile</h2></div></div><label>Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your name" /></label><p className="settings-help">This name is used only for your local workspace experience.</p></div><div className="settings-card"><div className="section-heading"><div><div className="kicker">PREFERENCES</div><h2>Research experience</h2></div></div><label className="settings-toggle"><span><strong>Email research updates</strong><small>Keep this enabled for future research and alert summaries.</small></span><input type="checkbox" checked={emailUpdates} onChange={(event) => setEmailUpdates(event.target.checked)} /></label><label className="settings-toggle"><span><strong>Compact data layout</strong><small>Use tighter spacing for tables and research lists.</small></span><input type="checkbox" checked={compactMode} onChange={(event) => setCompactMode(event.target.checked)} /></label></div></section><section className="settings-card settings-danger"><div><div className="kicker">LOCAL WORKSPACE</div><h2>Reset preferences</h2><p>Remove saved display preferences from this browser. Your account, portfolio, and watchlists are not deleted.</p></div><button className="secondary" onClick={reset}>Reset settings</button></section>{message && <p className="settings-message">{message}</p>}</>;
 }
 
 function DashboardOverviewPage() {
