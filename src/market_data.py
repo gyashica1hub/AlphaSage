@@ -194,7 +194,7 @@ class MarketDataService:
     def history(self, symbol: str, period: str = "6mo", interval: str = "1d") -> list[dict]:
         """Load historical OHLC data from the persistent cache or Yahoo Finance."""
         ticker = symbol.strip().upper()
-        cacheable = interval == "1d"
+        cacheable = interval == "1d" and period == "6mo"
         if self.persistent_cache and cacheable:
             cached = self.persistent_cache.get_history(ticker, 900)
             if cached:
