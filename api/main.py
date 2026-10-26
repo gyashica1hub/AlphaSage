@@ -28,6 +28,7 @@ import logging
 from src.portfolio_analytics import diversification_score, performers, risk_score
 from src.risk_metrics import historical_risk_metrics
 from src.technical_indicators import exponential_moving_average, relative_strength_index, simple_moving_average
+from src.forecast_baseline import baseline_forecast
 from src.portfolio_manager import add_stock, load_portfolio_raw, remove_stock
 from src.market_data import MarketDataService
 from src.market_cache import MarketCache
@@ -680,8 +681,9 @@ def stock_dashboard(symbol: str) -> dict:
     if len(closes) >= 15:
         rsi = relative_strength_index(closes, 14).iloc[-1]
         indicators["rsi_14"] = round(float(rsi), 2) if pd.notna(rsi) else None
+    forecast = baseline_forecast(closes.tolist(), window=20)
     history_points = history_points[-130:]
-    return {**details, "history": history_points, "benchmark": benchmark_points[-130:], "benchmark_symbol": benchmark_symbol, "stock_return_pct": stock_return, "benchmark_return_pct": benchmark_return, "history_quality": market_data.history_quality(history_points), "indicators": indicators, "corporate_actions": market_data.actions(ticker), "fundamentals": fundamentals}
+    return {**details, "history": history_points, "benchmark": benchmark_points[-130:], "benchmark_symbol": benchmark_symbol, "stock_return_pct": stock_return, "benchmark_return_pct": benchmark_return, "history_quality": market_data.history_quality(history_points), "indicators": indicators, "forecast": forecast, "corporate_actions": market_data.actions(ticker), "fundamentals": fundamentals}
 
 
 @app.get("/api/market-overview")
