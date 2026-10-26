@@ -1,6 +1,7 @@
 """FastAPI entry point for the AlphaSage web frontend."""
 
 import csv
+import hashlib
 import json
 import os
 import secrets
@@ -20,7 +21,7 @@ from dotenv import load_dotenv
 
 from src.fetch_prices import get_historical_data, get_portfolio_with_live_prices
 from src.logging_config import configure_logging
-from src.db.models import Alert, AlertDelivery, ForecastRecord, Note, PortfolioPosition, Transaction, User, Watchlist, WatchlistItem
+from src.db.models import Alert, AlertDelivery, ForecastRecord, Note, PortfolioPosition, ResearchDocument, Transaction, User, Watchlist, WatchlistItem
 from src.db.sqlite import initialize_database
 from src.db.session import get_session
 from src.auth import create_email_verification_otp, create_password_reset_otp, create_session_token, create_user, find_user_by_email, hash_password, read_session_token, verify_email_verification_otp, verify_password, verify_password_reset_otp
@@ -31,6 +32,7 @@ from src.risk_metrics import historical_risk_metrics
 from src.technical_indicators import exponential_moving_average, relative_strength_index, simple_moving_average
 from src.forecast_baseline import baseline_forecast
 from src.analytics_baseline import walk_forward_sma_backtest
+from src.research_retrieval import rank_documents
 from src.portfolio_manager import add_stock, load_portfolio_raw, remove_stock
 from src.market_data import MarketDataService
 from src.market_cache import MarketCache
@@ -98,6 +100,13 @@ class AlertCreate(BaseModel):
 class ForecastRequest(BaseModel):
     symbol: str = Field(min_length=1, max_length=30)
     model_name: str = Field(default="baseline_sma", pattern="^baseline_sma$")
+
+
+class ResearchDocumentCreate(BaseModel):
+    symbol: str | None = Field(default=None, max_length=30)
+    source_url: str = Field(min_length=1, max_length=1000)
+    source_title: str = Field(min_length=1, max_length=300)
+    content: str = Field(min_length=20, max_length=200000)
 
 
 class RegisterRequest(BaseModel):
@@ -382,6 +391,32 @@ def get_forecast_history(symbol: str | None = None, user: User = Depends(require
             query = query.filter(ForecastRecord.symbol == symbol.strip().upper())
         rows = query.order_by(ForecastRecord.created_at.desc()).limit(100).all()
     return [{"id": row.id, "symbol": row.symbol, "model_name": row.model_name, "model_version": row.model_version, "forecast": row.forecast, "lower_bound": row.lower_bound, "upper_bound": row.upper_bound, "features": json.loads(row.feature_snapshot), "validation": json.loads(row.validation_snapshot), "created_at": row.created_at.isoformat()} for row in rows]
+
+
+@app.post("/api/research/documents", status_code=201)
+def ingest_research_document(document: ResearchDocumentCreate, user: User = Depends(require_user)) -> dict:
+    content = document.content.strip()
+    record = ResearchDocument(id=str(uuid.uuid4()), user_id=user.id, symbol=document.symbol.strip().upper() if document.symbol else None, source_url=document.source_url.strip(), source_title=document.source_title.strip(), content=content, content_hash=hashlib.sha256(content.encode("utf-8")).hexdigest(), created_at=datetime.now(UTC))
+    with get_session() as session:
+        session.add(record)
+        session.commit()
+    return {"id": record.id, "symbol": record.symbol, "source_url": record.source_url, "source_title": record.source_title, "content_hash": record.content_hash, "created_at": record.created_at.isoformat()}
+
+
+@app.get("/api/research/documents")
+def list_research_documents(user: User = Depends(require_user)) -> list[dict]:
+    with get_session() as session:
+        rows = session.query(ResearchDocument).filter(ResearchDocument.user_id == user.id).order_by(ResearchDocument.created_at.desc()).limit(100).all()
+    return [{"id": row.id, "symbol": row.symbol, "source_url": row.source_url, "source_title": row.source_title, "content_hash": row.content_hash, "created_at": row.created_at.isoformat()} for row in rows]
+
+
+@app.get("/api/research/search")
+def search_research_documents(query: str, symbol: str | None = None, user: User = Depends(require_user)) -> dict:
+    with get_session() as session:
+        rows = session.query(ResearchDocument).filter(ResearchDocument.user_id == user.id).all()
+    documents = [{"id": row.id, "symbol": row.symbol, "source_url": row.source_url, "source_title": row.source_title, "content": row.content, "created_at": row.created_at.isoformat()} for row in rows]
+    results = rank_documents(documents, query, symbol=symbol)
+    return {"query": query, "symbol": symbol.upper() if symbol else None, "results": results, "citation_required": True}
 
 
 @app.post("/api/portfolio/transactions", status_code=201)

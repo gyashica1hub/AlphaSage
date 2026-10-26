@@ -111,6 +111,19 @@ CREATE TABLE IF NOT EXISTS forecast_records (
 
 CREATE INDEX IF NOT EXISTS idx_forecast_records_user_symbol ON forecast_records(user_id, symbol, created_at);
 
+CREATE TABLE IF NOT EXISTS research_documents (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    symbol TEXT,
+    source_url TEXT NOT NULL,
+    source_title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_research_documents_user_symbol ON research_documents(user_id, symbol, created_at);
+
 CREATE TABLE IF NOT EXISTS password_reset_otps (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

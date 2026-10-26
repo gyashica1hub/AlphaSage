@@ -143,6 +143,19 @@ class ForecastRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
+class ResearchDocument(Base):
+    __tablename__ = "research_documents"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    symbol: Mapped[str | None] = mapped_column(String)
+    source_url: Mapped[str] = mapped_column(String, nullable=False)
+    source_title: Mapped[str] = mapped_column(String, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
 class PasswordResetOTP(Base):
     __tablename__ = "password_reset_otps"
 
