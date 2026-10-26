@@ -451,6 +451,16 @@ def get_news(query: str = "Indian stock market", page_size: int = 12, user: User
     return {"articles": articles, "status": "Live provider headlines"}
 
 
+@app.post("/api/research/save-news", status_code=201)
+def save_news_article(article: NewsArticle, user: User = Depends(require_user)) -> dict:
+    content = f"{article.title}\n\n{article.description or ''}".strip()
+    record = ResearchDocument(id=str(uuid.uuid4()), user_id=user.id, source_url=article.url, source_title=article.title, content=content, content_hash=hashlib.sha256(content.encode("utf-8")).hexdigest(), created_at=datetime.now(UTC))
+    with get_session() as session:
+        session.add(record)
+        session.commit()
+    return {"id": record.id, "source_title": record.source_title, "source_url": record.source_url, "created_at": record.created_at.isoformat()}
+
+
 @app.post("/api/portfolio/transactions", status_code=201)
 def create_transaction(transaction: TransactionCreate, user: User = Depends(require_user)) -> dict:
     portfolio_id = load_portfolio_raw(user.id)["portfolio_id"]
