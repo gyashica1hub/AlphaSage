@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import requests
+import pandas as pd
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +27,7 @@ from src.email_service import send_email_verification_otp, send_password_reset_o
 import logging
 from src.portfolio_analytics import diversification_score, performers, risk_score
 from src.risk_metrics import historical_risk_metrics
+from src.technical_indicators import exponential_moving_average, relative_strength_index, simple_moving_average
 from src.portfolio_manager import add_stock, load_portfolio_raw, remove_stock
 from src.market_data import MarketDataService
 from src.market_cache import MarketCache
@@ -670,8 +672,16 @@ def stock_dashboard(symbol: str) -> dict:
         stock_return = round((history_points[-1]["close"] / history_points[0]["close"] - 1) * 100, 2)
     if len(benchmark_points) > 1:
         benchmark_return = round((benchmark_points[-1]["close"] / benchmark_points[0]["close"] - 1) * 100, 2)
+    closes = pd.Series([point["close"] for point in history_points], dtype="float64")
+    indicators: dict[str, float | None] = {"sma_20": None, "ema_20": None, "rsi_14": None}
+    if len(closes) >= 20:
+        indicators["sma_20"] = round(float(simple_moving_average(closes, 20).iloc[-1]), 2)
+        indicators["ema_20"] = round(float(exponential_moving_average(closes, 20).iloc[-1]), 2)
+    if len(closes) >= 15:
+        rsi = relative_strength_index(closes, 14).iloc[-1]
+        indicators["rsi_14"] = round(float(rsi), 2) if pd.notna(rsi) else None
     history_points = history_points[-130:]
-    return {**details, "history": history_points, "benchmark": benchmark_points[-130:], "benchmark_symbol": benchmark_symbol, "stock_return_pct": stock_return, "benchmark_return_pct": benchmark_return, "history_quality": market_data.history_quality(history_points), "corporate_actions": market_data.actions(ticker), "fundamentals": fundamentals}
+    return {**details, "history": history_points, "benchmark": benchmark_points[-130:], "benchmark_symbol": benchmark_symbol, "stock_return_pct": stock_return, "benchmark_return_pct": benchmark_return, "history_quality": market_data.history_quality(history_points), "indicators": indicators, "corporate_actions": market_data.actions(ticker), "fundamentals": fundamentals}
 
 
 @app.get("/api/market-overview")
