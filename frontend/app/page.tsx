@@ -764,7 +764,8 @@ function MarketDetailPage({ details, loading, onBack }: { details: StockDetails;
 function MarketAreaChart({ details, range, chartMode, compare, indicators }: { details: StockDetails; range: string; chartMode: "area" | "line"; compare: boolean; indicators: boolean }) {
   const historical = details.history || [];
   const intraday = details.intraday_history || [];
-  const source = range === "1D" && intraday.length > 1 ? intraday : historical;
+  const hasIntraday = range === "1D" && intraday.length > 1;
+  const source = hasIntraday ? intraday : historical;
   const latestTimestamp = source.length ? new Date(source[source.length - 1].date).getTime() : Date.now();
   const latestDate = new Date(latestTimestamp);
   const cutoff = new Date(latestDate);
@@ -773,7 +774,7 @@ function MarketAreaChart({ details, range, chartMode, compare, indicators }: { d
   if (range === "YTD") cutoff.setMonth(0, 1);
   if (range === "1Y") cutoff.setFullYear(cutoff.getFullYear() - 1);
   if (range === "5Y") cutoff.setFullYear(cutoff.getFullYear() - 5);
-  const history = range === "MAX" || range === "6M" ? source : source.filter((point) => new Date(point.date).getTime() >= cutoff.getTime());
+  const history = range === "1D" ? (hasIntraday ? intraday : historical.slice(-2)) : range === "MAX" ? source : range === "6M" ? source.slice(-126) : source.filter((point) => new Date(point.date).getTime() >= cutoff.getTime());
   const benchmark = details.benchmark || [];
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const values = history.map((point) => point.close);
