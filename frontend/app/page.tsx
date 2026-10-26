@@ -852,7 +852,7 @@ function WorkspacePage({ active }: { active: string }) {
   if (active === "Pricing") return <PricingPage />;
   if (active === "Dashboard") return <DashboardOverviewPage />;
   if (active === "Scanner") return <ScannerPage />;
-  if (active === "Settings") return <SettingsPage />;
+  if (active === "Settings") return <><SettingsPage /><SettingsOptionsPage /></>;
   const copy: Record<string, { kicker: string; title: string; subtitle: string; action: string; items: [string, string, string][] }> = {
     Dashboard: { kicker: "MARKET OVERVIEW", title: "Good morning, investor.", subtitle: "A focused view of your portfolio, watchlist, and the market signals worth your attention.", action: "Customize dashboard", items: [["Portfolio pulse", "Your workspace is ready", "Connect holdings to unlock live insights."], ["Market breadth", "Mixed session", "Track indices, sectors, and global markets."], ["AI research", "Ask AlphaSage", "Get cited answers about companies and markets."]] },
     Scanner: { kicker: "DISCOVERY WORKSPACE", title: "Find your next signal.", subtitle: "Screen the market using momentum, valuation, quality, and risk factors.", action: "Create a screen", items: [["Momentum", "Coming soon", "Discover stocks showing relative strength."], ["Quality", "Coming soon", "Filter companies by durable fundamentals."], ["Risk", "Coming soon", "Identify volatility and drawdown patterns."]] },
@@ -890,7 +890,7 @@ function SettingsPage() {
     localStorage.setItem("alphasage.emailUpdates", String(emailUpdates));
     localStorage.setItem("alphasage.compactMode", String(compactMode));
     document.documentElement.dataset.compactMode = compactMode ? "true" : "false";
-    setMessage("Your preferences were saved on this device.");
+    setMessage("Saved successfully ✓");
   };
 
   const reset = () => {
@@ -899,10 +899,26 @@ function SettingsPage() {
     localStorage.removeItem("alphasage.compactMode");
     setDisplayName(""); setEmailUpdates(true); setCompactMode(false);
     delete document.documentElement.dataset.compactMode;
-    setMessage("Settings were reset.");
+    setMessage("Settings reset successfully ✓");
   };
 
+
   return <><div className="page-header"><div><div className="kicker">WORKSPACE SETTINGS</div><h1>Make AlphaSage yours.</h1><p>Manage your profile, notification preferences, and research display settings.</p></div><button className="primary" onClick={save}>Save changes</button></div><div className="disclaimer"><ShieldCheck size={16} /><span><strong>Private preferences.</strong> These settings are stored locally in this development workspace.</span></div><section className="settings-layout"><div className="settings-card"><div className="section-heading"><div><div className="kicker">PROFILE</div><h2>Your workspace profile</h2></div></div><label>Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your name" /></label><p className="settings-help">This name is used only for your local workspace experience.</p></div><div className="settings-card"><div className="section-heading"><div><div className="kicker">PREFERENCES</div><h2>Research experience</h2></div></div><label className="settings-toggle"><span><strong>Email research updates</strong><small>Keep this enabled for future research and alert summaries.</small></span><input type="checkbox" checked={emailUpdates} onChange={(event) => setEmailUpdates(event.target.checked)} /></label><label className="settings-toggle"><span><strong>Compact data layout</strong><small>Use tighter spacing for tables and research lists.</small></span><input type="checkbox" checked={compactMode} onChange={(event) => setCompactMode(event.target.checked)} /></label></div></section><section className="settings-card settings-danger"><div><div className="kicker">LOCAL WORKSPACE</div><h2>Reset preferences</h2><p>Remove saved display preferences from this browser. Your account, portfolio, and watchlists are not deleted.</p></div><button className="secondary" onClick={reset}>Reset settings</button></section>{message && <p className="settings-message">{message}</p>}</>;
+}
+
+function SettingsExtras({ theme, setTheme, defaultWorkspace, setDefaultWorkspace, currency, setCurrency, timezone, setTimezone, soundAlerts, setSoundAlerts }: { theme: string; setTheme: (value: string) => void; defaultWorkspace: string; setDefaultWorkspace: (value: string) => void; currency: string; setCurrency: (value: string) => void; timezone: string; setTimezone: (value: string) => void; soundAlerts: boolean; setSoundAlerts: (value: boolean) => void }) {
+  return <section className="settings-card settings-extra-card"><div className="section-heading"><div><div className="kicker">DISPLAY & DATA</div><h2>Workspace defaults</h2></div></div><div className="settings-select-grid"><label>Theme<select value={theme} onChange={(event) => setTheme(event.target.value)}><option value="dark">Dark</option><option value="light">Light</option></select></label><label>Opening page<select value={defaultWorkspace} onChange={(event) => setDefaultWorkspace(event.target.value)}><option>Portfolio</option><option>Dashboard</option><option>Watchlists</option><option>Global markets</option></select></label><label>Display currency<select value={currency} onChange={(event) => setCurrency(event.target.value)}><option>INR (₹)</option><option>USD ($)</option><option>EUR (€)</option></select></label><label>Timezone<select value={timezone} onChange={(event) => setTimezone(event.target.value)}><option>Asia/Kolkata</option><option>UTC</option><option>America/New_York</option><option>Europe/London</option></select></label></div><label className="settings-toggle"><span><strong>Alert sound</strong><small>Play an alert sound when browser notifications are enabled.</small></span><input type="checkbox" checked={soundAlerts} onChange={(event) => setSoundAlerts(event.target.checked)} /></label></section>;
+}
+
+function SettingsOptionsPage() {
+  const [theme, setTheme] = useState("dark");
+  const [workspace, setWorkspace] = useState("Portfolio");
+  const [currency, setCurrency] = useState("INR (₹)");
+  const [timezone, setTimezone] = useState("Asia/Kolkata");
+  const [sound, setSound] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const save = () => { localStorage.setItem("alphasage.display", JSON.stringify({ theme, workspace, currency, timezone, sound })); document.documentElement.dataset.theme = theme; setSaved(true); window.setTimeout(() => setSaved(false), 2500); };
+  return <section className="settings-card settings-options"><div className="section-heading"><div><div className="kicker">DISPLAY & DATA</div><h2>Workspace defaults</h2></div></div><div className="settings-select-grid"><label>Theme<select value={theme} onChange={(event) => setTheme(event.target.value)}><option value="dark">Dark</option><option value="light">Light</option></select></label><label>Opening page<select value={workspace} onChange={(event) => setWorkspace(event.target.value)}><option>Portfolio</option><option>Dashboard</option><option>Watchlists</option><option>Global markets</option></select></label><label>Display currency<select value={currency} onChange={(event) => setCurrency(event.target.value)}><option>INR (₹)</option><option>USD ($)</option><option>EUR (€)</option></select></label><label>Timezone<select value={timezone} onChange={(event) => setTimezone(event.target.value)}><option>Asia/Kolkata</option><option>UTC</option><option>America/New_York</option><option>Europe/London</option></select></label></div><label className="settings-toggle"><span><strong>Alert sound</strong><small>Play an alert sound when browser notifications are enabled.</small></span><input type="checkbox" checked={sound} onChange={(event) => setSound(event.target.checked)} /></label><button className="primary" onClick={save}>{saved ? "Saved ✓" : "Save display settings"}</button></section>;
 }
 
 function DashboardOverviewPage() {
