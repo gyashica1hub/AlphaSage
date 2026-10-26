@@ -454,8 +454,11 @@ def get_news(query: str = "Indian stock market", page_size: int = 12, user: User
 @app.post("/api/research/save-news", status_code=201)
 def save_news_article(article: NewsArticle, user: User = Depends(require_user)) -> dict:
     content = f"{article.title}\n\n{article.description or ''}".strip()
-    record = ResearchDocument(id=str(uuid.uuid4()), user_id=user.id, source_url=article.url, source_title=article.title, content=content, content_hash=hashlib.sha256(content.encode("utf-8")).hexdigest(), created_at=datetime.now(UTC))
     with get_session() as session:
+        existing = session.query(ResearchDocument).filter(ResearchDocument.user_id == user.id, ResearchDocument.source_url == article.url).first()
+        if existing:
+            return {"id": existing.id, "source_title": existing.source_title, "source_url": existing.source_url, "created_at": existing.created_at.isoformat(), "already_saved": True}
+        record = ResearchDocument(id=str(uuid.uuid4()), user_id=user.id, source_url=article.url, source_title=article.title, content=content, content_hash=hashlib.sha256(content.encode("utf-8")).hexdigest(), created_at=datetime.now(UTC))
         session.add(record)
         session.commit()
     return {"id": record.id, "source_title": record.source_title, "source_url": record.source_url, "created_at": record.created_at.isoformat()}
