@@ -125,6 +125,7 @@ class ResearchDocumentCreate(BaseModel):
 class ResearchAnalysisRequest(BaseModel):
     question: str = Field(min_length=3, max_length=500)
     symbol: str | None = Field(default=None, max_length=30)
+    requested_tool: str | None = Field(default=None, max_length=40)
 
 
 class NewsArticle(BaseModel):
@@ -456,7 +457,7 @@ def analyze_research(request: ResearchAnalysisRequest, user: User = Depends(requ
         rows = session.query(ResearchDocument).filter(ResearchDocument.user_id == user.id).all()
     documents = [{"id": row.id, "symbol": row.symbol, "source_url": row.source_url, "source_title": row.source_title, "content": row.content, "created_at": row.created_at.isoformat()} for row in rows]
     results = rank_documents(documents, request.question, symbol=request.symbol.upper() if request.symbol else None)
-    return run_supervisor(request.question, results)
+    return run_supervisor(request.question, results, requested_tool=request.requested_tool)
 
 
 @app.get("/api/news")
