@@ -194,7 +194,8 @@ class MarketDataService:
     def history(self, symbol: str, period: str = "6mo", interval: str = "1d") -> list[dict]:
         """Load historical OHLC data from the persistent cache or Yahoo Finance."""
         ticker = symbol.strip().upper()
-        if self.persistent_cache:
+        cacheable = interval == "1d"
+        if self.persistent_cache and cacheable:
             cached = self.persistent_cache.get_history(ticker, 900)
             if cached:
                 return cached
@@ -209,8 +210,9 @@ class MarketDataService:
                     if close is None or close <= 0 or (high is not None and low is not None and high < low):
                         logger.warning("market_history_invalid_point", extra={"symbol": ticker, "date": str(index)})
                         continue
-                    points.append({"date": index.strftime("%Y-%m-%d"), "open": _number(row.get("Open")), "high": high, "low": low, "close": round(close, 2), "volume": int(row["Volume"]) if _number(row.get("Volume")) is not None else None})
-                if self.persistent_cache:
+                    point_date = index.strftime("%Y-%m-%d") if interval == "1d" else index.isoformat()
+                    points.append({"date": point_date, "open": _number(row.get("Open")), "high": high, "low": low, "close": round(close, 2), "volume": int(row["Volume"]) if _number(row.get("Volume")) is not None else None})
+                if self.persistent_cache and cacheable:
                     self.persistent_cache.put_history(ticker, points)
                 return points
             except Exception as error:

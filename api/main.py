@@ -659,10 +659,12 @@ def stock_dashboard(symbol: str) -> dict:
     details = stock_details(ticker)
     benchmark_symbol = "^NSEI" if ticker.endswith(".NS") else "^GSPC"
     history_points: list[dict] = []
+    intraday_points: list[dict] = []
     benchmark_points: list[dict] = []
     fundamentals = {"market_cap": None, "pe_ratio": None, "dividend_yield": None, "week52_high": None, "week52_low": None}
     try:
         history_points = market_data.history(ticker)
+        intraday_points = market_data.history(ticker, period="1d", interval="5m")
         benchmark_points = market_data.history(benchmark_symbol)
         info = yf.Ticker(ticker).info
         fundamentals = {"market_cap": info.get("marketCap"), "pe_ratio": info.get("trailingPE"), "dividend_yield": info.get("dividendYield"), "week52_high": info.get("fiftyTwoWeekHigh"), "week52_low": info.get("fiftyTwoWeekLow")}
@@ -685,7 +687,7 @@ def stock_dashboard(symbol: str) -> dict:
     forecast = baseline_forecast(closes.tolist(), window=20)
     forecast_validation = walk_forward_sma_backtest(closes, window=20)
     history_points = history_points[-130:]
-    return {**details, "history": history_points, "benchmark": benchmark_points[-130:], "benchmark_symbol": benchmark_symbol, "stock_return_pct": stock_return, "benchmark_return_pct": benchmark_return, "history_quality": market_data.history_quality(history_points), "indicators": indicators, "forecast": forecast, "forecast_validation": forecast_validation, "corporate_actions": market_data.actions(ticker), "fundamentals": fundamentals}
+    return {**details, "history": history_points, "intraday_history": intraday_points, "benchmark": benchmark_points[-130:], "benchmark_symbol": benchmark_symbol, "stock_return_pct": stock_return, "benchmark_return_pct": benchmark_return, "history_quality": market_data.history_quality(history_points), "indicators": indicators, "forecast": forecast, "forecast_validation": forecast_validation, "corporate_actions": market_data.actions(ticker), "fundamentals": fundamentals}
 
 
 @app.get("/api/market-overview")
