@@ -95,6 +95,22 @@ CREATE TABLE IF NOT EXISTS alert_deliveries (
 
 CREATE INDEX IF NOT EXISTS idx_alert_deliveries_alert_id ON alert_deliveries(alert_id, created_at);
 
+CREATE TABLE IF NOT EXISTS forecast_records (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    symbol TEXT NOT NULL,
+    model_name TEXT NOT NULL,
+    model_version TEXT NOT NULL,
+    forecast REAL NOT NULL,
+    lower_bound REAL,
+    upper_bound REAL,
+    feature_snapshot TEXT NOT NULL,
+    validation_snapshot TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_forecast_records_user_symbol ON forecast_records(user_id, symbol, created_at);
+
 CREATE TABLE IF NOT EXISTS password_reset_otps (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

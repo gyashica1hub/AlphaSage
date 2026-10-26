@@ -1,6 +1,7 @@
 """FastAPI entry point for the AlphaSage web frontend."""
 
 import csv
+import json
 import os
 import secrets
 import uuid
@@ -19,7 +20,7 @@ from dotenv import load_dotenv
 
 from src.fetch_prices import get_historical_data, get_portfolio_with_live_prices
 from src.logging_config import configure_logging
-from src.db.models import Alert, AlertDelivery, Note, PortfolioPosition, Transaction, User, Watchlist, WatchlistItem
+from src.db.models import Alert, AlertDelivery, ForecastRecord, Note, PortfolioPosition, Transaction, User, Watchlist, WatchlistItem
 from src.db.sqlite import initialize_database
 from src.db.session import get_session
 from src.auth import create_email_verification_otp, create_password_reset_otp, create_session_token, create_user, find_user_by_email, hash_password, read_session_token, verify_email_verification_otp, verify_password, verify_password_reset_otp
@@ -92,6 +93,11 @@ class AlertCreate(BaseModel):
     rule: str = Field(pattern="^(price_above|price_below|change_pct_above|change_pct_below)$")
     threshold: float
     cooldown_minutes: int = Field(default=60, ge=1, le=10080)
+
+
+class ForecastRequest(BaseModel):
+    symbol: str = Field(min_length=1, max_length=30)
+    model_name: str = Field(default="baseline_sma", pattern="^baseline_sma$")
 
 
 class RegisterRequest(BaseModel):
@@ -343,6 +349,39 @@ def get_portfolio_risk(user: User = Depends(require_user)) -> dict:
             "checked_at": datetime.now(UTC).isoformat(),
         },
     }
+
+
+@app.get("/api/analytics/models")
+def list_analytics_models() -> list[dict]:
+    return [{"name": "baseline_sma", "version": "1.0", "type": "baseline", "status": "active", "description": "Trailing moving-average forecast with empirical interval."}]
+
+
+@app.post("/api/analytics/forecast", status_code=201)
+def create_forecast(request: ForecastRequest, user: User = Depends(require_user)) -> dict:
+    symbol = request.symbol.strip().upper()
+    history = get_historical_data(symbol, period="max")
+    prices = history["Close"].tolist() if not history.empty and "Close" in history else []
+    forecast = baseline_forecast(prices, window=20)
+    validation = walk_forward_sma_backtest(pd.Series(prices), window=20)
+    if forecast.get("status") != "ok":
+        raise HTTPException(status_code=422, detail="Not enough historical data for a forecast")
+    indicators = {"sma_20": simple_moving_average(pd.Series(prices), 20).iloc[-1], "ema_20": exponential_moving_average(pd.Series(prices), 20).iloc[-1], "rsi_14": relative_strength_index(pd.Series(prices), 14).iloc[-1]}
+    now = datetime.now(UTC)
+    record = ForecastRecord(id=str(uuid.uuid4()), user_id=user.id, symbol=symbol, model_name=request.model_name, model_version="1.0", forecast=float(forecast["forecast"]), lower_bound=float(forecast["lower_bound"]), upper_bound=float(forecast["upper_bound"]), feature_snapshot=json.dumps({key: float(value) for key, value in indicators.items() if pd.notna(value)}), validation_snapshot=json.dumps(validation), created_at=now)
+    with get_session() as session:
+        session.add(record)
+        session.commit()
+    return {"id": record.id, "symbol": symbol, "model_name": record.model_name, "model_version": record.model_version, "forecast": forecast, "validation": validation, "created_at": now.isoformat()}
+
+
+@app.get("/api/analytics/forecast-history")
+def get_forecast_history(symbol: str | None = None, user: User = Depends(require_user)) -> list[dict]:
+    with get_session() as session:
+        query = session.query(ForecastRecord).filter(ForecastRecord.user_id == user.id)
+        if symbol:
+            query = query.filter(ForecastRecord.symbol == symbol.strip().upper())
+        rows = query.order_by(ForecastRecord.created_at.desc()).limit(100).all()
+    return [{"id": row.id, "symbol": row.symbol, "model_name": row.model_name, "model_version": row.model_version, "forecast": row.forecast, "lower_bound": row.lower_bound, "upper_bound": row.upper_bound, "features": json.loads(row.feature_snapshot), "validation": json.loads(row.validation_snapshot), "created_at": row.created_at.isoformat()} for row in rows]
 
 
 @app.post("/api/portfolio/transactions", status_code=201)
