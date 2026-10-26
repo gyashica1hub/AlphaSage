@@ -36,6 +36,7 @@ from src.technical_indicators import exponential_moving_average, relative_streng
 from src.forecast_baseline import baseline_forecast
 from src.analytics_baseline import walk_forward_sma_backtest
 from src.research_retrieval import citations_are_valid, rank_documents
+from src.agent_analysis import run_supervisor
 from src.portfolio_manager import add_stock, load_portfolio_raw, remove_stock
 from src.market_data import MarketDataService
 from src.market_cache import MarketCache
@@ -119,6 +120,11 @@ class ResearchDocumentCreate(BaseModel):
     source_url: str = Field(min_length=1, max_length=1000)
     source_title: str = Field(min_length=1, max_length=300)
     content: str = Field(min_length=20, max_length=200000)
+
+
+class ResearchAnalysisRequest(BaseModel):
+    question: str = Field(min_length=3, max_length=500)
+    symbol: str | None = Field(default=None, max_length=30)
 
 
 class NewsArticle(BaseModel):
@@ -441,6 +447,16 @@ def search_research_documents(query: str, symbol: str | None = None, user: User 
     if not scoped_symbol and portfolio_symbols:
         results.sort(key=lambda result: 0 if result.get("symbol") in portfolio_symbols else 1)
     return {"query": query, "symbol": scoped_symbol, "portfolio_symbols": sorted(portfolio_symbols), "results": results, "citation_required": True, "citations_valid": citations_are_valid(results), "retrieval_mode": "hybrid"}
+
+
+@app.post("/api/research/analyze")
+def analyze_research(request: ResearchAnalysisRequest, user: User = Depends(require_user)) -> dict:
+    """Run the bounded Phase 8 supervisor over this user's cited research only."""
+    with get_session() as session:
+        rows = session.query(ResearchDocument).filter(ResearchDocument.user_id == user.id).all()
+    documents = [{"id": row.id, "symbol": row.symbol, "source_url": row.source_url, "source_title": row.source_title, "content": row.content, "created_at": row.created_at.isoformat()} for row in rows]
+    results = rank_documents(documents, request.question, symbol=request.symbol.upper() if request.symbol else None)
+    return run_supervisor(request.question, results)
 
 
 @app.get("/api/news")
