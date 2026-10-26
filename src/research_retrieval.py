@@ -1,8 +1,9 @@
-"""Citation-first lexical retrieval used before introducing vector search."""
+"""Citation-first hybrid retrieval for local research documents."""
 
 from __future__ import annotations
 
 import re
+from difflib import SequenceMatcher
 
 
 def _tokens(value: str) -> set[str]:
@@ -10,7 +11,7 @@ def _tokens(value: str) -> set[str]:
 
 
 def rank_documents(documents: list[dict], query: str, symbol: str | None = None, limit: int = 5) -> list[dict]:
-    """Rank documents by title/content overlap and return citation metadata."""
+    """Rank documents using phrase, token, title, and fuzzy semantic-like overlap."""
     query_tokens = _tokens(query)
     if not query_tokens:
         return []
@@ -20,8 +21,17 @@ def rank_documents(documents: list[dict], query: str, symbol: str | None = None,
             continue
         title_tokens = _tokens(document.get("source_title", ""))
         content_tokens = _tokens(document.get("content", ""))
-        score = len(query_tokens & content_tokens) + (2 * len(query_tokens & title_tokens))
+        normalized_query = " ".join(query.lower().split())
+        normalized_text = " ".join(f"{document.get('source_title', '')} {document.get('content', '')}".lower().split())
+        phrase_bonus = 3 if normalized_query in normalized_text else 0
+        fuzzy_bonus = int(SequenceMatcher(None, normalized_query, normalized_text[:1200]).ratio() * 2)
+        score = len(query_tokens & content_tokens) + (2 * len(query_tokens & title_tokens)) + phrase_bonus + fuzzy_bonus
         if score:
             ranked.append((score, document))
     ranked.sort(key=lambda item: (-item[0], item[1].get("created_at", "")))
-    return [{"score": score, "citation": {"document_id": document["id"], "title": document["source_title"], "url": document["source_url"]}, "excerpt": document["content"][:500]} for score, document in ranked[:limit]]
+    return [{"score": score, "citation": {"document_id": document["id"], "title": document["source_title"], "url": document["source_url"]}, "excerpt": document["content"][:700], "symbol": document.get("symbol"), "retrieval": "hybrid"} for score, document in ranked[:limit]]
+
+
+def citations_are_valid(results: list[dict]) -> bool:
+    """Require every result to carry an identifiable source citation."""
+    return all(result.get("citation", {}).get("document_id") and result.get("citation", {}).get("url") for result in results)

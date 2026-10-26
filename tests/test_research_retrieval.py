@@ -1,4 +1,4 @@
-from src.research_retrieval import rank_documents
+from src.research_retrieval import citations_are_valid, rank_documents
 
 
 def test_retrieval_returns_citations_and_supports_symbol_scope() -> None:
@@ -12,6 +12,15 @@ def test_retrieval_returns_citations_and_supports_symbol_scope() -> None:
     assert len(results) == 1
     assert results[0]["citation"]["document_id"] == "a"
     assert results[0]["citation"]["url"] == "https://example.com/infy"
+    assert results[0]["retrieval"] == "hybrid"
+    assert citations_are_valid(results)
+
+
+def test_retrieval_supports_phrase_matching_and_rejects_missing_citations() -> None:
+    results = rank_documents([{"id": "a", "source_title": "Risk report", "source_url": "https://example.com/risk", "content": "Revenue growth slowed and debt increased."}], "revenue growth")
+    assert results
+    assert citations_are_valid(results)
+    assert not citations_are_valid([{"citation": {"document_id": "", "url": ""}}])
 
 
 def test_retrieval_requires_query_terms() -> None:

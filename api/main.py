@@ -33,7 +33,7 @@ from src.risk_metrics import historical_risk_metrics
 from src.technical_indicators import exponential_moving_average, relative_strength_index, simple_moving_average
 from src.forecast_baseline import baseline_forecast
 from src.analytics_baseline import walk_forward_sma_backtest
-from src.research_retrieval import rank_documents
+from src.research_retrieval import citations_are_valid, rank_documents
 from src.portfolio_manager import add_stock, load_portfolio_raw, remove_stock
 from src.market_data import MarketDataService
 from src.market_cache import MarketCache
@@ -424,8 +424,12 @@ def search_research_documents(query: str, symbol: str | None = None, user: User 
     with get_session() as session:
         rows = session.query(ResearchDocument).filter(ResearchDocument.user_id == user.id).all()
     documents = [{"id": row.id, "symbol": row.symbol, "source_url": row.source_url, "source_title": row.source_title, "content": row.content, "created_at": row.created_at.isoformat()} for row in rows]
-    results = rank_documents(documents, query, symbol=symbol)
-    return {"query": query, "symbol": symbol.upper() if symbol else None, "results": results, "citation_required": True}
+    portfolio_symbols = {position["symbol"] for position in load_portfolio_raw(user.id).get("holdings", []) if position.get("symbol")}
+    scoped_symbol = symbol.upper() if symbol else None
+    results = rank_documents(documents, query, symbol=scoped_symbol)
+    if not scoped_symbol and portfolio_symbols:
+        results.sort(key=lambda result: 0 if result.get("symbol") in portfolio_symbols else 1)
+    return {"query": query, "symbol": scoped_symbol, "portfolio_symbols": sorted(portfolio_symbols), "results": results, "citation_required": True, "citations_valid": citations_are_valid(results), "retrieval_mode": "hybrid"}
 
 
 @app.get("/api/news")
