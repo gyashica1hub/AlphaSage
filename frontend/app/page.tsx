@@ -104,6 +104,7 @@ export default function Home() {
   const [watchlistName, setWatchlistName] = useState("My watchlist");
   const [holdings, setHoldings] = useState<Holding[]>(fallbackHoldings);
   const [loading, setLoading] = useState(true);
+  const [workspaceName, setWorkspaceName] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [newHolding, setNewHolding] = useState({ symbol: "", name: "", sector: "Technology", quantity: "1", avg_buy_price: "100" });
@@ -148,6 +149,14 @@ export default function Home() {
   const [newsStatus, setNewsStatus] = useState("");
   const [riskMetrics, setRiskMetrics] = useState<RiskMetric[]>([]);
   const [riskMetricsLoading, setRiskMetricsLoading] = useState(false);
+
+  useEffect(() => {
+    const syncWorkspaceName = () => setWorkspaceName(localStorage.getItem("alphasage.displayName") || "");
+    syncWorkspaceName();
+    window.addEventListener("storage", syncWorkspaceName);
+    window.addEventListener("alphasage-settings-updated", syncWorkspaceName);
+    return () => { window.removeEventListener("storage", syncWorkspaceName); window.removeEventListener("alphasage-settings-updated", syncWorkspaceName); };
+  }, []);
 
   useEffect(() => {
     if (!stockDetails || stockDetailsPinned) return;
@@ -586,7 +595,7 @@ export default function Home() {
           <button>Join the waitlist <ChevronDown size={14} /></button>
         </div>
         <div className="guest-card">
-          <span className="status-dot" /> {authUser ? authUser.display_name || authUser.email : "Guest workspace"}
+            <span className="status-dot" /> {workspaceName || (authUser ? authUser.display_name || authUser.email : "Guest workspace")}
           <p>{authUser ? "Your workspace is signed in and ready to sync." : "Sign in to sync your portfolio across devices."}</p>
           <button className="sign-in" onClick={() => { if (authUser) signOut(); else { setAuthMode("login"); setShowAuth(true); } }}>{authUser ? "Sign out" : "Sign in"} <ChevronDown size={14} /></button>
         </div>
@@ -886,7 +895,7 @@ function SettingsPage() {
   }, []);
 
   const save = () => {
-    localStorage.setItem("alphasage.displayName", displayName.trim());
+    localStorage.setItem("alphasage.displayName", displayName.trim()); window.dispatchEvent(new Event("alphasage-settings-updated"));
     localStorage.setItem("alphasage.emailUpdates", String(emailUpdates));
     localStorage.setItem("alphasage.compactMode", String(compactMode));
     document.documentElement.dataset.compactMode = compactMode ? "true" : "false";
