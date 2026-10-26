@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import requests
+import xml.etree.ElementTree as ET
 import pandas as pd
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
 from fastapi.responses import RedirectResponse
@@ -432,7 +433,18 @@ def get_news(query: str = "Indian stock market", page_size: int = 12, user: User
     """Return linked headlines from the configured provider; never fabricate news."""
     api_key = os.getenv("NEWS_API_KEY", "")
     if not api_key:
-        return {"articles": [], "status": "News provider is not configured"}
+        try:
+            rss = requests.get("https://news.google.com/rss/search", params={"q": query, "hl": "en-IN", "gl": "IN", "ceid": "IN:en"}, timeout=12)
+            root = ET.fromstring(rss.text)
+            articles = []
+            for item in root.findall(".//item")[: min(page_size, 50)]:
+                title = item.findtext("title") or ""
+                url = item.findtext("link") or ""
+                if title and url:
+                    articles.append({"title": title, "url": url, "source": item.findtext("source") or "Google News source", "published_at": item.findtext("pubDate"), "description": item.findtext("description"), "sentiment": "Neutral"})
+            return {"articles": articles, "status": "Live headlines via Google News RSS"}
+        except (requests.RequestException, ET.ParseError):
+            return {"articles": [], "status": "Live news provider unavailable"}
     response = requests.get("https://newsapi.org/v2/everything", params={"q": query, "language": "en", "sortBy": "publishedAt", "pageSize": min(page_size, 50), "apiKey": api_key}, timeout=12)
     if not response.ok:
         return {"articles": [], "status": "News provider unavailable"}
