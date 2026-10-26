@@ -439,7 +439,15 @@ def get_news(query: str = "Indian stock market", page_size: int = 12, user: User
     articles = []
     for article in response.json().get("articles", []):
         if article.get("title") and article.get("url"):
-            articles.append({"title": article["title"], "url": article["url"], "source": (article.get("source") or {}).get("name") or "Unknown source", "published_at": article.get("publishedAt"), "description": article.get("description")})
+            polarity = 0.0
+            title = article["title"]
+            try:
+                from textblob import TextBlob
+                polarity = round(TextBlob(title).sentiment.polarity, 3)
+            except ImportError:
+                pass
+            sentiment = "Positive" if polarity >= 0.05 else ("Negative" if polarity <= -0.05 else "Neutral")
+            articles.append({"title": title, "url": article["url"], "source": (article.get("source") or {}).get("name") or "Unknown source", "published_at": article.get("publishedAt"), "description": article.get("description"), "sentiment": sentiment})
     return {"articles": articles, "status": "Live provider headlines"}
 
 
