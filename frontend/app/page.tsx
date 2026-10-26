@@ -772,6 +772,33 @@ function ResearchPage(props: { documents: ResearchDocument[]; results: ResearchR
 
 function NewsFeed() {
   const [articles, setArticles] = useState<NewsArticle[]>([]);
+  const [selected, setSelected] = useState<NewsArticle | null>(null);
+  const [query, setQuery] = useState("Indian stock market");
+  const [status, setStatus] = useState("Loading headlines…");
+  const [saved, setSaved] = useState<string[]>([]);
+  const api = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+  const load = () => {
+    setStatus("Loading headlines…");
+    fetch(`${api}/news?query=${encodeURIComponent(query)}`, { credentials: "include" })
+      .then((response) => response.json())
+      .then((data) => { setArticles(data.articles || []); setStatus(data.status || ""); })
+      .catch(() => setStatus("Live news is temporarily unavailable."));
+  };
+  useEffect(() => { load(); }, []);
+  const saveArticle = (article: NewsArticle) => {
+    fetch(`${api}/research/save-news`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(article) })
+      .then((response) => { if (!response.ok) throw new Error(); setSaved((items) => items.includes(article.url) ? items : [...items, article.url]); setStatus("Article saved to your research library."); })
+      .catch(() => setStatus("Unable to save this article."));
+  };
+  return <>
+    <div className="news-toolbar"><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") load(); }} placeholder="Search company or market news" /><button className="primary compact" onClick={load}>Refresh news</button></div>
+    {articles.length > 0 ? <div className="news-feed-list">{articles.map((article) => <article className="news-item" key={`${article.url}-${article.title}`}><button className="news-item-main" onClick={() => setSelected(article)}><strong>{article.title}</strong><small>{article.source}{article.published_at ? ` · ${new Date(article.published_at).toLocaleString()}` : ""}</small>{article.description && <p>{article.description}</p>}</button><button className="news-save-button" onClick={() => saveArticle(article)}>{saved.includes(article.url) ? "Saved" : "Save"}</button></article>)}</div> : <div className="activity-empty">{status}</div>}
+    {selected && <div className="modal-backdrop" onClick={() => setSelected(null)}><section className="news-detail-modal" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><div className="kicker">NEWS DETAIL</div><h2>{selected.title}</h2></div><button className="icon-button" onClick={() => setSelected(null)}>×</button></div><ul className="news-detail-points"><li><strong>Source:</strong> {selected.source}</li><li><strong>Published:</strong> {selected.published_at ? new Date(selected.published_at).toLocaleString() : "Time not provided"}</li><li><strong>What the headline says:</strong> {selected.description || "The provider did not return a summary. Open the original source for the full report."}</li><li><strong>How to use it:</strong> Compare this report with company filings, official announcements, price movement, and other independent sources.</li><li><strong>Important:</strong> A headline alone is not enough to make an investment decision. Check the original article and confirm the facts.</li></ul><div className="modal-actions"><button className="secondary" onClick={() => saveArticle(selected)}>Save to research</button><a className="primary" href={selected.url} target="_blank" rel="noreferrer">Open original source ↗</a></div></section></div>}
+  </>;
+}
+
+function NewsFeedLegacy() {
+  const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
   const [status, setStatus] = useState("Loading headlines…");
   const [savedUrls, setSavedUrls] = useState<string[]>([]);
