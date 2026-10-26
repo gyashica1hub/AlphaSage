@@ -762,7 +762,11 @@ function MarketDetailPage({ details, loading, onBack }: { details: StockDetails;
 }
 
 function MarketAreaChart({ details, range, chartMode, compare, indicators }: { details: StockDetails; range: string; chartMode: "area" | "line"; compare: boolean; indicators: boolean }) {
-  const history = range === "1D" && (details.intraday_history?.length || 0) > 1 ? details.intraday_history || [] : details.history || [];
+  const historical = details.history || [];
+  const intraday = details.intraday_history || [];
+  const source = range === "1D" && intraday.length > 1 ? intraday : historical;
+  const pointsByRange: Record<string, number> = { "5D": 5, "1M": 22, "YTD": 130, "1Y": 252 };
+  const history = pointsByRange[range] ? source.slice(-pointsByRange[range]) : source;
   const benchmark = details.benchmark || [];
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const values = history.map((point) => point.close);
